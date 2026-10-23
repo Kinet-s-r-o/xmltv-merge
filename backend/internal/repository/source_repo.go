@@ -136,10 +136,11 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 func (r *SourceRepository) GetByID(ctx context.Context, id int) (*models.Source, error) {
 	var s models.Source
 	err := r.db.QueryRow(ctx,
-		`SELECT id, name, COALESCE(generator_info_name, ''), COALESCE(generator_info_url, ''),
+		`SELECT id, name, source_url, refresh_interval_minutes, history_days,
+		        COALESCE(generator_info_name, ''), COALESCE(generator_info_url, ''),
 		        last_import_at, COALESCE(last_import_status, ''), COALESCE(last_import_error, ''), created_at, updated_at
 		 FROM sources WHERE id = $1`, id,
-	).Scan(&s.ID, &s.Name, &s.GeneratorInfoName, &s.GeneratorInfoURL,
+	).Scan(&s.ID, &s.Name, &s.SourceURL, &s.RefreshIntervalMinutes, &s.HistoryDays, &s.GeneratorInfoName, &s.GeneratorInfoURL,
 		&s.LastImportAt, &s.LastImportStatus, &s.LastImportError, &s.CreatedAt, &s.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil

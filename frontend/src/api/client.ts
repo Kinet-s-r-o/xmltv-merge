@@ -140,6 +140,8 @@ export const api = {
 
   deleteSource: (id: number) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
 
+  refreshSource: (id: number) => request<{ status: string }>(`/sources/${id}/refresh`, { method: 'POST' }),
+
   channels: (params?: { source_id?: number; search?: string }) => {
     const qs = new URLSearchParams()
     if (params?.source_id) qs.set('source_id', String(params.source_id))

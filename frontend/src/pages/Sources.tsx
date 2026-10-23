@@ -61,6 +61,16 @@ export function Sources() {
     onError: (err: Error) => setError(err.message),
   })
 
+  const refreshMutation = useMutation({
+    mutationFn: (id: number) => api.refreshSource(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
+      queryClient.invalidateQueries({ queryKey: ['channels'] })
+      queryClient.invalidateQueries({ queryKey: ['programmes'] })
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
   const handleDelete = (id: number, sourceName: string) => {
     if (window.confirm(`Delete source "${sourceName}" and all its channels and programmes? This cannot be undone.`)) {
       setError(null)
@@ -215,6 +225,16 @@ export function Sources() {
                     )}
                     {source.last_import_error && <p className="text-red-400 max-w-md">{source.last_import_error}</p>}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => { setError(null); refreshMutation.mutate(source.id) }}
+                    disabled={refreshMutation.isPending}
+                    aria-label={`Refresh ${source.name} now`}
+                    title="Update this source now"
+                    className="p-2 rounded-lg text-indigo-400 hover:bg-indigo-500/10 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${refreshMutation.isPending && refreshMutation.variables === source.id ? 'animate-spin' : ''}`} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleEdit(source)}

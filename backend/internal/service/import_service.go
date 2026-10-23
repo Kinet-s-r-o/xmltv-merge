@@ -107,6 +107,20 @@ func (s *ImportService) UpdateURLSource(ctx context.Context, id int, name, sourc
 	return s.sourceRepo.UpdateURL(ctx, id, name, sourceURL, intervalMinutes, historyDays)
 }
 
+func (s *ImportService) RefreshSource(ctx context.Context, id int) (bool, error) {
+	source, err := s.sourceRepo.GetByID(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if source == nil {
+		return false, nil
+	}
+	if err := s.ImportURL(ctx, *source); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
 type ImportResult struct {
 	SourceName string `json:"source_name"`
 	Channels   int    `json:"channels"`

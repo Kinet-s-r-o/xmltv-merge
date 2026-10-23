@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -124,6 +125,26 @@ func (h *Handler) DeleteSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) RefreshSource(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil || id < 1 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source id"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
+	defer cancel()
+	found, err := h.importSvc.RefreshSource(ctx, id)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "source not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
 func (h *Handler) ListChannels(w http.ResponseWriter, r *http.Request) {
