@@ -9,6 +9,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error || `HTTP ${res.status}`)
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -128,6 +129,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(source),
     }),
+
+  deleteSource: (id: number) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
 
   channels: (params?: { source_id?: number; search?: string }) => {
     const qs = new URLSearchParams()

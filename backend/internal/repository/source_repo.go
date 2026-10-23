@@ -32,6 +32,14 @@ func (r *SourceRepository) SaveURL(ctx context.Context, name, sourceURL string, 
 	return id, err
 }
 
+func (r *SourceRepository) Delete(ctx context.Context, id int) (bool, error) {
+	result, err := r.db.Exec(ctx, `DELETE FROM sources WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() > 0, nil
+}
+
 func (r *SourceRepository) Due(ctx context.Context) ([]models.Source, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, name, source_url, refresh_interval_minutes

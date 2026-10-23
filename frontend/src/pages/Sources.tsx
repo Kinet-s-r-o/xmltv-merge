@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link2, Clock3, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { api } from '../api/client'
 
 export function Sources() {
@@ -33,6 +33,24 @@ export function Sources() {
     },
     onError: (err: Error) => setError(err.message),
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.deleteSource(id),
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
+      queryClient.invalidateQueries({ queryKey: ['channels'] })
+      queryClient.invalidateQueries({ queryKey: ['programmes'] })
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
+  const handleDelete = (id: number, sourceName: string) => {
+    if (window.confirm(`Delete source "${sourceName}" and all its channels and programmes? This cannot be undone.`)) {
+      setError(null)
+      deleteMutation.mutate(id)
+    }
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -130,17 +148,29 @@ export function Sources() {
                     {source.channel_count} channels · {source.programme_count} programmes · every {source.refresh_interval_minutes / 60}h
                   </p>
                 </div>
-                <div className="text-right text-xs text-zinc-500">
-                  <p className="flex items-center justify-end gap-1">
-                    <Clock3 className="w-3 h-3" /> Last update: {source.last_import_at ? new Date(source.last_import_at).toLocaleString() : 'Pending'}
-                  </p>
-                  {source.last_import_status && (
-                    <span className={source.last_import_status === 'success' ? 'text-emerald-400' : 'text-red-400'}>
-                      {source.last_import_status === 'success' ? <CheckCircle className="inline w-3 h-3 mr-1" /> : <RefreshCw className="inline w-3 h-3 mr-1" />}
-                      {source.last_import_status}
-                    </span>
-                  )}
-                  {source.last_import_error && <p className="text-red-400 max-w-md">{source.last_import_error}</p>}
+                <div className="flex items-center gap-4">
+                  <div className="text-right text-xs text-zinc-500">
+                    <p className="flex items-center justify-end gap-1">
+                      <Clock3 className="w-3 h-3" /> Last update: {source.last_import_at ? new Date(source.last_import_at).toLocaleString() : 'Pending'}
+                    </p>
+                    {source.last_import_status && (
+                      <span className={source.last_import_status === 'success' ? 'text-emerald-400' : 'text-red-400'}>
+                        {source.last_import_status === 'success' ? <CheckCircle className="inline w-3 h-3 mr-1" /> : <RefreshCw className="inline w-3 h-3 mr-1" />}
+                        {source.last_import_status}
+                      </span>
+                    )}
+                    {source.last_import_error && <p className="text-red-400 max-w-md">{source.last_import_error}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(source.id, source.name)}
+                    disabled={deleteMutation.isPending}
+                    aria-label={`Delete ${source.name}`}
+                    title="Delete source and its channels and programmes"
+                    className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))}

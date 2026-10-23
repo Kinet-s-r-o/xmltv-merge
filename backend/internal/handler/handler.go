@@ -78,6 +78,24 @@ func (h *Handler) AddSource(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "status": "scheduled"})
 }
 
+func (h *Handler) DeleteSource(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil || id < 1 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source id"})
+		return
+	}
+	deleted, err := h.epgSvc.DeleteSource(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !deleted {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "source not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) ListChannels(w http.ResponseWriter, r *http.Request) {
 	var sourceID *int
 	if sid := r.URL.Query().Get("source_id"); sid != "" {

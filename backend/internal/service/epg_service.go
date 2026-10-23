@@ -30,6 +30,10 @@ func (s *EPGService) GetSources(ctx context.Context) ([]models.Source, error) {
 	return s.sourceRepo.List(ctx)
 }
 
+func (s *EPGService) DeleteSource(ctx context.Context, id int) (bool, error) {
+	return s.sourceRepo.Delete(ctx, id)
+}
+
 func (s *EPGService) GetChannels(ctx context.Context, sourceID *int, search string) ([]models.Channel, error) {
 	return s.channelRepo.List(ctx, sourceID, search)
 }

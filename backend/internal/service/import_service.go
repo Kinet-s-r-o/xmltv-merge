@@ -48,7 +48,7 @@ func (s *ImportService) ImportURL(ctx context.Context, source models.Source) err
 					} else if len(body) > maxSourceSize {
 						err = fmt.Errorf("source file exceeds 100 MB limit")
 					} else {
-						_, err = s.ImportXML(ctx, source.Name, bytes.NewReader(body))
+						_, err = s.importXML(ctx, source.ID, source.Name, bytes.NewReader(body))
 					}
 				}
 			}
@@ -91,6 +91,10 @@ type ImportResult struct {
 }
 
 func (s *ImportService) ImportXML(ctx context.Context, sourceName string, data io.Reader) (*ImportResult, error) {
+	return s.importXML(ctx, 0, sourceName, data)
+}
+
+func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName string, data io.Reader) (*ImportResult, error) {
 	start := time.Now()
 
 	// Read all data
@@ -122,9 +126,11 @@ func (s *ImportService) ImportXML(ctx context.Context, sourceName string, data i
 	}
 
 	// Upsert source
-	sourceID, err := s.sourceRepo.Upsert(ctx, name, result.Source.GeneratorInfoName, result.Source.GeneratorInfoURL)
-	if err != nil {
-		return nil, fmt.Errorf("upsert source: %w", err)
+	if sourceID == 0 {
+		sourceID, err = s.sourceRepo.Upsert(ctx, name, result.Source.GeneratorInfoName, result.Source.GeneratorInfoURL)
+		if err != nil {
+			return nil, fmt.Errorf("upsert source: %w", err)
+		}
 	}
 
 	// Upsert channels
