@@ -21,7 +21,7 @@ services:
     build: ./backend
     container_name: xmltv_backend
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://xmltv:xmltv_secret@db:5432/xmltv?sslmode=disable}
+      DATABASE_URL: postgres://${POSTGRES_USER:-xmltv}:${POSTGRES_PASSWORD:-xmltv_secret}@db:5432/${POSTGRES_DB:-xmltv}?sslmode=disable
       PORT: ${BACKEND_PORT:-8080}
     expose:
       - "${BACKEND_PORT:-8080}"
