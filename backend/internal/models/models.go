@@ -15,8 +15,8 @@ type Source struct {
 	LastImportError        string     `json:"last_import_error,omitempty"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
-	ChannelCount           int        `json:"channel_count,omitempty"`
-	ProgrammeCount         int        `json:"programme_count,omitempty"`
+	ChannelCount           int        `json:"channel_count"`
+	ProgrammeCount         int        `json:"programme_count"`
 }
 
 type Channel struct {

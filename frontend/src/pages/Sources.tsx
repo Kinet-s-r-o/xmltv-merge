@@ -209,7 +209,7 @@ export function Sources() {
                     </a>
                   )}
                   <p className="text-xs text-zinc-500 mt-1">
-                    {source.channel_count} channels · {source.programme_count} programmes · every {source.refresh_interval_minutes / 60}h · keep {source.history_days} days
+                    {source.channel_count ?? 0} channels · {source.programme_count ?? 0} programmes · every {source.refresh_interval_minutes / 60}h · keep {source.history_days} days
                   </p>
                 </div>
                 <div className="flex items-center gap-4">

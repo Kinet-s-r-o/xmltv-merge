@@ -9,8 +9,8 @@ export function Dashboard() {
     queryFn: () => api.sources(),
   })
 
-  const totalChannels = sources?.reduce((sum, s) => sum + s.channel_count, 0) ?? 0
-  const totalProgrammes = sources?.reduce((sum, s) => sum + s.programme_count, 0) ?? 0
+  const totalChannels = sources?.reduce((sum, s) => sum + (s.channel_count ?? 0), 0) ?? 0
+  const totalProgrammes = sources?.reduce((sum, s) => sum + (s.programme_count ?? 0), 0) ?? 0
 
   return (
     <div className="p-6 space-y-6">
