@@ -183,7 +183,7 @@ func (h *Handler) ListProgrammes(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit < 1 || limit > 100 {
+	if limit < 1 || limit > 20000 {
 		limit = 50
 	}
 
