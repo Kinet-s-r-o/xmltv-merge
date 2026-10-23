@@ -235,7 +235,7 @@ export function Sources() {
                     {source.channel_count ?? 0} channels · {source.programme_count ?? 0} programmes · every {source.refresh_interval_minutes / 60}h · keep {source.history_days} days
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="ml-auto flex w-full max-w-[440px] items-center gap-4">
                   <button
                     type="button"
                     role="switch"
@@ -252,7 +252,7 @@ export function Sources() {
                     <span className={`block h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] transition-transform duration-200 ease-out ${source.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                     <Power className="sr-only" />
                   </button>
-                  <div className="text-right text-xs text-zinc-500">
+                  <div className="min-w-0 flex-1 text-right text-xs text-zinc-500">
                     <p className="flex items-center justify-end gap-1">
                       <Clock3 className="w-3 h-3" /> Last update: {source.last_import_at ? new Date(source.last_import_at).toLocaleString() : 'Pending'}
                     </p>
