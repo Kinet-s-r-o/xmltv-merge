@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { format, addDays } from 'date-fns'
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, Film, MapPin, Search, X } from 'lucide-react'
 import { api, Programme } from '../api/client'
 
 const HOUR_WIDTH = 150
@@ -15,6 +14,7 @@ export function EPGView() {
   const [selectedSource, setSelectedSource] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [selectedProgrammeId, setSelectedProgrammeId] = useState<number | null>(null)
 
   const { data: sources = [] } = useQuery({
     queryKey: ['sources'],
@@ -45,6 +45,21 @@ export function EPGView() {
     }),
     enabled: channelIds.length > 0,
   })
+
+  const { data: selectedProgramme, isLoading: programmeLoading } = useQuery({
+    queryKey: ['programme', selectedProgrammeId],
+    queryFn: () => api.programme(selectedProgrammeId!),
+    enabled: selectedProgrammeId !== null,
+  })
+
+  useEffect(() => {
+    if (selectedProgrammeId === null) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedProgrammeId(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [selectedProgrammeId])
 
   const programmesByChannel = useMemo(() => {
     const grouped = new Map<number, Programme[]>()
@@ -152,10 +167,10 @@ export function EPGView() {
                     const position = getProgrammePosition(programme)
                     if (position.left >= HOURS_PER_DAY * HOUR_WIDTH || position.left + position.width <= 0) return null
                     return (
-                      <Link
+                      <button
                         key={programme.id}
-                        to={`/programmes/${programme.id}`}
-                        state={{ from: '/epg' }}
+                        type="button"
+                        onClick={() => setSelectedProgrammeId(programme.id)}
                         className="absolute inset-y-1 overflow-hidden rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-1 hover:bg-indigo-500/20 transition-colors"
                         style={{ left: position.left + 2, width: position.width - 4 }}
                         title={`${programme.titles?.[0]?.title || programme.subtitle || 'Untitled'} · ${format(new Date(programme.start_time), 'HH:mm')}–${format(new Date(programme.stop_time), 'HH:mm')}`}
@@ -164,7 +179,7 @@ export function EPGView() {
                         <span className="block truncate text-[10px] text-zinc-500">
                           {format(new Date(programme.start_time), 'HH:mm')}–{format(new Date(programme.stop_time), 'HH:mm')}
                         </span>
-                      </Link>
+                      </button>
                     )
                   })}
                 </div>
@@ -173,6 +188,51 @@ export function EPGView() {
           </div>
         )}
       </div>
+
+      {selectedProgrammeId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProgrammeId(null) }}
+        >
+          <section role="dialog" aria-modal="true" aria-labelledby="programme-modal-title" className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4">
+                {selectedProgramme?.icon_url && <img src={selectedProgramme.icon_url} alt="" className="h-28 w-20 rounded-lg object-cover" />}
+                <div>
+                  <h2 id="programme-modal-title" className="text-xl font-bold text-zinc-100">
+                    {programmeLoading ? 'Loading programme...' : selectedProgramme?.titles?.[0]?.title || selectedProgramme?.subtitle || 'Untitled'}
+                  </h2>
+                  {selectedProgramme && (
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+                      <span className="flex items-center gap-1"><Calendar className="h-4 w-4" />{format(new Date(selectedProgramme.start_time), 'PPPP, HH:mm')}–{format(new Date(selectedProgramme.stop_time), 'HH:mm')}</span>
+                      {selectedProgramme.country && <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{selectedProgramme.country}</span>}
+                      {selectedProgramme.year && <span className="flex items-center gap-1"><Film className="h-4 w-4" />{selectedProgramme.year}</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button type="button" onClick={() => setSelectedProgrammeId(null)} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" aria-label="Close programme details"><X className="h-5 w-5" /></button>
+            </div>
+            {selectedProgramme?.categories && selectedProgramme.categories.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selectedProgramme.categories.map((category) => <span key={category.id} className="rounded-full bg-indigo-500/10 px-2 py-1 text-xs text-indigo-300">{category.category}</span>)}
+              </div>
+            )}
+            {selectedProgramme?.description && (
+              <div className="mt-5 border-t border-zinc-800 pt-4">
+                <h3 className="mb-2 text-sm font-medium text-zinc-300">Description</h3>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">{selectedProgramme.description}</p>
+              </div>
+            )}
+            {selectedProgramme?.credits && selectedProgramme.credits.length > 0 && (
+              <div className="mt-5 border-t border-zinc-800 pt-4">
+                <h3 className="mb-2 text-sm font-medium text-zinc-300">Credits</h3>
+                <div className="space-y-1 text-sm text-zinc-400">{selectedProgramme.credits.map((credit) => <p key={credit.id}><span className="mr-2 capitalize text-zinc-500">{credit.type}</span>{credit.name}</p>)}</div>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   )
 }
