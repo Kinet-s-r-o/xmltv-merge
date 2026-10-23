@@ -21,28 +21,34 @@ type XMLTV struct {
 }
 
 type Channel struct {
-	ID                string `xml:"id,attr"`
-	DisplayName       string `xml:"display-name"`
-	DisplayNameLang   string `xml:"display-name>lang,attr"`
-	Icon              string `xml:"icon>src,attr"`
-	URL               string `xml:"url"`
+	ID          string        `xml:"id,attr"`
+	DisplayName LocalizedText `xml:"display-name"`
+	Icon        Icon          `xml:"icon"`
+	URL         string        `xml:"url"`
+}
+
+type LocalizedText struct {
+	Lang  string `xml:"lang,attr"`
+	Value string `xml:",chardata"`
+}
+
+type Icon struct {
+	Src string `xml:"src,attr"`
 }
 
 type Programme struct {
-	Channel      string     `xml:"channel,attr"`
-	Start        string     `xml:"start,attr"`
-	Stop         string     `xml:"stop,attr"`
-	Titles       []Title    `xml:"title"`
-	Subtitle     string     `xml:"sub-title"`
-	SubtitleLang string     `xml:"sub-title>lang,attr"`
-	Desc         string     `xml:"desc"`
-	DescLang     string     `xml:"desc>lang,attr"`
-	Credits      Credits    `xml:"credits"`
-	Date         string     `xml:"date"`
-	Categories   []Category `xml:"category"`
-	Icon         string     `xml:"icon>src,attr"`
-	Country      string     `xml:"country"`
-	EpisodeNum   EpisodeNum `xml:"episode-num"`
+	Channel    string        `xml:"channel,attr"`
+	Start      string        `xml:"start,attr"`
+	Stop       string        `xml:"stop,attr"`
+	Titles     []Title       `xml:"title"`
+	Subtitle   LocalizedText `xml:"sub-title"`
+	Desc       LocalizedText `xml:"desc"`
+	Credits    Credits       `xml:"credits"`
+	Date       string        `xml:"date"`
+	Categories []Category    `xml:"category"`
+	Icon       Icon          `xml:"icon"`
+	Country    string        `xml:"country"`
+	EpisodeNum EpisodeNum    `xml:"episode-num"`
 }
 
 type Title struct {
@@ -147,9 +153,9 @@ func ParseXML(data []byte) (*ParseResult, error) {
 	for _, ch := range tv.Channels {
 		pc := ParsedChannel{
 			ExternalID: ch.ID,
-			Name:       ch.DisplayName,
-			NameLang:   ch.DisplayNameLang,
-			IconURL:    ch.Icon,
+			Name:       ch.DisplayName.Value,
+			NameLang:   ch.DisplayName.Lang,
+			IconURL:    ch.Icon.Src,
 			URL:        ch.URL,
 		}
 		result.Channels = append(result.Channels, pc)
@@ -182,12 +188,12 @@ func parseProgramme(p Programme) (*ParsedProgramme, error) {
 		ChannelExternalID: p.Channel,
 		StartTime:         startTime,
 		StopTime:          stopTime,
-		Subtitle:          p.Subtitle,
-		SubtitleLang:      p.SubtitleLang,
-		Description:       p.Desc,
-		DescriptionLang:   p.DescLang,
+		Subtitle:          p.Subtitle.Value,
+		SubtitleLang:      p.Subtitle.Lang,
+		Description:       p.Desc.Value,
+		DescriptionLang:   p.Desc.Lang,
 		Country:           p.Country,
-		IconURL:           p.Icon,
+		IconURL:           p.Icon.Src,
 		EpisodeNum:        p.EpisodeNum.Value,
 		EpisodeNumSystem:  p.EpisodeNum.System,
 	}
@@ -290,4 +296,3 @@ func applyOffset(t time.Time, offset string) time.Time {
 
 	return localTime.UTC()
 }
-
