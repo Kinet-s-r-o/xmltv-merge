@@ -1,5 +1,6 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Tv, LayoutDashboard, ListVideo, Database } from 'lucide-react'
+import { Tv, LayoutDashboard, ListVideo, Database, Moon, Sun } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -15,6 +16,13 @@ const navItems = [
 ]
 
 export function Layout() {
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem('xmltv-theme') === 'light')
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', lightMode)
+    localStorage.setItem('xmltv-theme', lightMode ? 'light' : 'dark')
+  }, [lightMode])
+
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="w-56 border-r border-zinc-800 bg-zinc-900/50 flex flex-col">
@@ -42,8 +50,17 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-zinc-800 text-xs text-zinc-500">
-          v1.0.0
+        <div className="p-3 border-t border-zinc-800 text-xs text-zinc-500 flex items-center justify-between">
+          <span>v1.0.0</span>
+          <button
+            type="button"
+            onClick={() => setLightMode((enabled) => !enabled)}
+            aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+            title={lightMode ? 'Dark mode' : 'Light mode'}
+            className="p-2 rounded-lg hover:bg-zinc-800/70 hover:text-zinc-200 transition-colors"
+          >
+            {lightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          </button>
         </div>
       </aside>
       <main className="flex-1 overflow-auto">

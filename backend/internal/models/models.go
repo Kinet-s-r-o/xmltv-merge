@@ -3,17 +3,19 @@ package models
 import "time"
 
 type Source struct {
-	ID                  int       `json:"id"`
-	Name                string    `json:"name"`
-	GeneratorInfoName   string    `json:"generator_info_name,omitempty"`
-	GeneratorInfoURL    string    `json:"generator_info_url,omitempty"`
-	LastImportAt        *time.Time `json:"last_import_at,omitempty"`
-	LastImportStatus    string    `json:"last_import_status,omitempty"`
-	LastImportError     string    `json:"last_import_error,omitempty"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
-	ChannelCount        int       `json:"channel_count,omitempty"`
-	ProgrammeCount      int       `json:"programme_count,omitempty"`
+	ID                     int        `json:"id"`
+	Name                   string     `json:"name"`
+	SourceURL              string     `json:"source_url"`
+	RefreshIntervalMinutes int        `json:"refresh_interval_minutes"`
+	GeneratorInfoName      string     `json:"generator_info_name,omitempty"`
+	GeneratorInfoURL       string     `json:"generator_info_url,omitempty"`
+	LastImportAt           *time.Time `json:"last_import_at,omitempty"`
+	LastImportStatus       string     `json:"last_import_status,omitempty"`
+	LastImportError        string     `json:"last_import_error,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+	ChannelCount           int        `json:"channel_count,omitempty"`
+	ProgrammeCount         int        `json:"programme_count,omitempty"`
 }
 
 type Channel struct {
@@ -50,10 +52,10 @@ type Programme struct {
 }
 
 type Title struct {
-	ID         int64  `json:"id"`
+	ID          int64  `json:"id"`
 	ProgrammeID int64  `json:"programme_id"`
-	Lang       string `json:"lang"`
-	Title      string `json:"title"`
+	Lang        string `json:"lang"`
+	Title       string `json:"title"`
 }
 
 type Credit struct {

@@ -60,6 +60,24 @@ func (h *Handler) ListSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sources)
 }
 
+func (h *Handler) AddSource(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name                   string `json:"name"`
+		URL                    string `json:"url"`
+		RefreshIntervalMinutes int    `json:"refresh_interval_minutes"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	id, err := h.importSvc.AddURLSource(r.Context(), input.Name, input.URL, input.RefreshIntervalMinutes)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "status": "scheduled"})
+}
+
 func (h *Handler) ListChannels(w http.ResponseWriter, r *http.Request) {
 	var sourceID *int
 	if sid := r.URL.Query().Get("source_id"); sid != "" {

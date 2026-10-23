@@ -33,6 +33,10 @@ func main() {
 
 	importSvc := service.NewImportService(pool)
 	epgSvc := service.NewEPGService(pool)
+	scheduler := service.NewScheduler(pool, importSvc)
+	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
+	defer stopScheduler()
+	go scheduler.Run(schedulerCtx)
 	h := handler.NewHandler(importSvc, epgSvc)
 
 	r := chi.NewRouter()
@@ -50,6 +54,7 @@ func main() {
 	r.Head("/api/v1/health", h.Health)
 	r.Post("/api/v1/import", h.Import)
 	r.Get("/api/v1/sources", h.ListSources)
+	r.Post("/api/v1/sources", h.AddSource)
 	r.Get("/api/v1/channels", h.ListChannels)
 	r.Get("/api/v1/channels/{id}", h.GetChannel)
 	r.Get("/api/v1/programmes", h.ListProgrammes)
@@ -76,6 +81,7 @@ func main() {
 	<-quit
 
 	log.Println("shutting down...")
+	stopScheduler()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	srv.Shutdown(shutdownCtx)

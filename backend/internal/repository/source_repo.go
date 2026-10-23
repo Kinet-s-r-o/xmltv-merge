@@ -18,6 +18,43 @@ func NewSourceRepository(db *pgxpool.Pool) *SourceRepository {
 	return &SourceRepository{db: db}
 }
 
+func (r *SourceRepository) SaveURL(ctx context.Context, name, sourceURL string, intervalMinutes int) (int, error) {
+	var id int
+	err := r.db.QueryRow(ctx,
+		`INSERT INTO sources (name, source_url, refresh_interval_minutes)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (name) DO UPDATE SET source_url = EXCLUDED.source_url,
+			refresh_interval_minutes = EXCLUDED.refresh_interval_minutes,
+			last_import_at = NULL, last_import_status = NULL, last_import_error = NULL,
+			updated_at = now()
+		 RETURNING id`, name, sourceURL, intervalMinutes,
+	).Scan(&id)
+	return id, err
+}
+
+func (r *SourceRepository) Due(ctx context.Context) ([]models.Source, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT id, name, source_url, refresh_interval_minutes
+		 FROM sources
+		 WHERE source_url <> '' AND (last_import_at IS NULL OR
+		       last_import_at + make_interval(mins => refresh_interval_minutes) <= now())
+		 ORDER BY last_import_at NULLS FIRST`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sources := make([]models.Source, 0)
+	for rows.Next() {
+		var source models.Source
+		if err := rows.Scan(&source.ID, &source.Name, &source.SourceURL, &source.RefreshIntervalMinutes); err != nil {
+			return nil, err
+		}
+		sources = append(sources, source)
+	}
+	return sources, rows.Err()
+}
+
 func (r *SourceRepository) Upsert(ctx context.Context, name, genName, genURL string) (int, error) {
 	var id int
 	err := r.db.QueryRow(ctx,
@@ -46,7 +83,8 @@ func (r *SourceRepository) UpdateImportStatus(ctx context.Context, id int, statu
 
 func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT s.id, s.name, s.generator_info_name, s.generator_info_url,
+		`SELECT s.id, s.name, s.source_url, s.refresh_interval_minutes,
+		        s.generator_info_name, s.generator_info_url,
 		        s.last_import_at, s.last_import_status, s.last_import_error,
 		        s.created_at, s.updated_at,
 		        COUNT(DISTINCT c.id) as channel_count,
@@ -64,7 +102,8 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	var sources []models.Source
 	for rows.Next() {
 		var s models.Source
-		if err := rows.Scan(&s.ID, &s.Name, &s.GeneratorInfoName, &s.GeneratorInfoURL,
+		if err := rows.Scan(&s.ID, &s.Name, &s.SourceURL, &s.RefreshIntervalMinutes,
+			&s.GeneratorInfoName, &s.GeneratorInfoURL,
 			&s.LastImportAt, &s.LastImportStatus, &s.LastImportError,
 			&s.CreatedAt, &s.UpdatedAt, &s.ChannelCount, &s.ProgrammeCount); err != nil {
 			return nil, err

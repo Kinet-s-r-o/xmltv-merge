@@ -2,16 +2,18 @@ package database
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"fmt"
+	"io/fs"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:embed migrations/001_init.sql
-var initialSchema string
+//go:embed migrations/*.sql
+var migrations embed.FS
 
 func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(url)
@@ -31,13 +33,26 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if err := pool.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("ping: %w", err)
 	}
-	for _, statement := range strings.Split(initialSchema, ";") {
-		if statement = strings.TrimSpace(statement); statement == "" {
-			continue
-		}
-		if _, err := pool.Exec(ctx, statement); err != nil {
+	files, err := fs.Glob(migrations, "migrations/*.sql")
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("list database migrations: %w", err)
+	}
+	sort.Strings(files)
+	for _, file := range files {
+		data, err := migrations.ReadFile(file)
+		if err != nil {
 			pool.Close()
-			return nil, fmt.Errorf("apply database schema: %w", err)
+			return nil, fmt.Errorf("read database migration %s: %w", file, err)
+		}
+		for _, statement := range strings.Split(string(data), ";") {
+			if statement = strings.TrimSpace(statement); statement == "" {
+				continue
+			}
+			if _, err := pool.Exec(ctx, statement); err != nil {
+				pool.Close()
+				return nil, fmt.Errorf("apply database migration %s: %w", file, err)
+			}
 		}
 	}
 

@@ -1,13 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"xmltv-merge/internal/models"
 	"xmltv-merge/internal/parser"
 	"xmltv-merge/internal/repository"
 )
@@ -19,6 +24,42 @@ type ImportService struct {
 	progRepo    *repository.ProgrammeRepository
 }
 
+var sourceHTTPClient = &http.Client{Timeout: 5 * time.Minute}
+
+func (s *ImportService) ImportURL(ctx context.Context, source models.Source) error {
+	parsed, err := url.ParseRequestURI(source.SourceURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		err = fmt.Errorf("source URL must be a valid HTTP or HTTPS URL")
+	} else {
+		var req *http.Request
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, source.SourceURL, nil)
+		if err == nil {
+			var response *http.Response
+			response, err = sourceHTTPClient.Do(req)
+			if err == nil {
+				defer response.Body.Close()
+				if response.StatusCode < 200 || response.StatusCode >= 300 {
+					err = fmt.Errorf("source returned HTTP %s", response.Status)
+				} else {
+					const maxSourceSize = 100 << 20
+					body, readErr := io.ReadAll(io.LimitReader(response.Body, maxSourceSize+1))
+					if readErr != nil {
+						err = readErr
+					} else if len(body) > maxSourceSize {
+						err = fmt.Errorf("source file exceeds 100 MB limit")
+					} else {
+						_, err = s.ImportXML(ctx, source.Name, bytes.NewReader(body))
+					}
+				}
+			}
+		}
+	}
+	if err != nil {
+		_ = s.sourceRepo.UpdateImportStatus(ctx, source.ID, "error", err.Error())
+	}
+	return err
+}
+
 func NewImportService(db *pgxpool.Pool) *ImportService {
 	return &ImportService{
 		db:          db,
@@ -28,12 +69,25 @@ func NewImportService(db *pgxpool.Pool) *ImportService {
 	}
 }
 
+func (s *ImportService) AddURLSource(ctx context.Context, name, sourceURL string, intervalMinutes int) (int, error) {
+	name = strings.TrimSpace(name)
+	sourceURL = strings.TrimSpace(sourceURL)
+	parsed, err := url.ParseRequestURI(sourceURL)
+	if name == "" || err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return 0, fmt.Errorf("name and a valid HTTP or HTTPS source URL are required")
+	}
+	if intervalMinutes < 5 || intervalMinutes > 10080 {
+		return 0, fmt.Errorf("refresh interval must be between 5 and 10080 minutes")
+	}
+	return s.sourceRepo.SaveURL(ctx, name, sourceURL, intervalMinutes)
+}
+
 type ImportResult struct {
-	SourceName   string `json:"source_name"`
-	Channels     int    `json:"channels"`
-	Programmes   int    `json:"programmes"`
-	Duration     string `json:"duration"`
-	ImportedAt   string `json:"imported_at"`
+	SourceName string `json:"source_name"`
+	Channels   int    `json:"channels"`
+	Programmes int    `json:"programmes"`
+	Duration   string `json:"duration"`
+	ImportedAt string `json:"imported_at"`
 }
 
 func (s *ImportService) ImportXML(ctx context.Context, sourceName string, data io.Reader) (*ImportResult, error) {
