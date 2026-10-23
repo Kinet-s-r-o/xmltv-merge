@@ -9,8 +9,9 @@ export function Sources() {
   const [url, setUrl] = useState('')
   const [intervalHours, setIntervalHours] = useState(6)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
-  const { data: sources, isLoading } = useQuery({
+  const { data: sources, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
     refetchInterval: 30_000,
@@ -26,6 +27,8 @@ export function Sources() {
       setName('')
       setUrl('')
       setError(null)
+      setSuccess(true)
+      window.setTimeout(() => setSuccess(false), 5000)
       queryClient.invalidateQueries({ queryKey: ['sources'] })
     },
     onError: (err: Error) => setError(err.message),
@@ -48,7 +51,7 @@ export function Sources() {
             <input
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setSuccess(false) }}
               placeholder="e.g. My EPG"
               className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
             />
@@ -59,7 +62,7 @@ export function Sources() {
               required
               type="url"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => { setUrl(e.target.value); setSuccess(false) }}
               placeholder="https://example.com/epg.xml"
               className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
             />
@@ -88,7 +91,7 @@ export function Sources() {
             <Link2 className="w-4 h-4" />
             {addMutation.isPending ? 'Adding...' : 'Add source'}
           </button>
-          {addMutation.isSuccess && <span className="text-sm text-emerald-400">Source added; first download is scheduled.</span>}
+          {success && <span className="text-sm text-emerald-400">Source added; first download is scheduled.</span>}
         </div>
       </form>
 
@@ -105,6 +108,13 @@ export function Sources() {
         </div>
         {isLoading ? (
           <div className="p-6 text-center text-zinc-500">Loading...</div>
+        ) : isError ? (
+          <div className="p-6 flex flex-wrap items-center justify-center gap-3 text-sm text-red-400">
+            <span>Could not load sources: {(sourcesError as Error).message}</span>
+            <button onClick={() => refetch()} className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200">
+              Retry
+            </button>
+          </div>
         ) : sources && sources.length > 0 ? (
           <div className="divide-y divide-zinc-800">
             {sources.map((source) => (
