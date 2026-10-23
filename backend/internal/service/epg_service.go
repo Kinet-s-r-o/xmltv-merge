@@ -34,6 +34,10 @@ func (s *EPGService) DeleteSource(ctx context.Context, id int) (bool, error) {
 	return s.sourceRepo.Delete(ctx, id)
 }
 
+func (s *EPGService) SetSourceEnabled(ctx context.Context, id int, enabled bool) (bool, error) {
+	return s.sourceRepo.SetEnabled(ctx, id, enabled)
+}
+
 func (s *EPGService) GetChannels(ctx context.Context, sourceID *int, search string) ([]models.Channel, error) {
 	return s.channelRepo.List(ctx, sourceID, search)
 }

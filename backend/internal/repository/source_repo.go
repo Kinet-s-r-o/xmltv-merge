@@ -59,7 +59,7 @@ func (r *SourceRepository) Due(ctx context.Context) ([]models.Source, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, name, source_url, refresh_interval_minutes
 		 FROM sources
-		 WHERE source_url <> '' AND (last_import_at IS NULL OR
+		 WHERE enabled = TRUE AND source_url <> '' AND (last_import_at IS NULL OR
 		       last_import_at + make_interval(mins => refresh_interval_minutes) <= now())
 		 ORDER BY last_import_at NULLS FIRST`)
 	if err != nil {
@@ -76,6 +76,16 @@ func (r *SourceRepository) Due(ctx context.Context) ([]models.Source, error) {
 		sources = append(sources, source)
 	}
 	return sources, rows.Err()
+}
+
+func (r *SourceRepository) SetEnabled(ctx context.Context, id int, enabled bool) (bool, error) {
+	result, err := r.db.Exec(ctx,
+		`UPDATE sources SET enabled = $2, updated_at = now() WHERE id = $1`, id, enabled,
+	)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() > 0, nil
 }
 
 func (r *SourceRepository) Upsert(ctx context.Context, name, genName, genURL string) (int, error) {
@@ -106,7 +116,7 @@ func (r *SourceRepository) UpdateImportStatus(ctx context.Context, id int, statu
 
 func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT s.id, s.name, s.source_url, s.refresh_interval_minutes, s.history_days,
+		`SELECT s.id, s.name, s.source_url, s.enabled, s.refresh_interval_minutes, s.history_days,
 		        COALESCE(s.generator_info_name, ''), COALESCE(s.generator_info_url, ''),
 		        s.last_import_at, COALESCE(s.last_import_status, ''), COALESCE(s.last_import_error, ''),
 		        s.created_at, s.updated_at,
@@ -122,7 +132,7 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	var sources []models.Source
 	for rows.Next() {
 		var s models.Source
-		if err := rows.Scan(&s.ID, &s.Name, &s.SourceURL, &s.RefreshIntervalMinutes, &s.HistoryDays,
+		if err := rows.Scan(&s.ID, &s.Name, &s.SourceURL, &s.Enabled, &s.RefreshIntervalMinutes, &s.HistoryDays,
 			&s.GeneratorInfoName, &s.GeneratorInfoURL,
 			&s.LastImportAt, &s.LastImportStatus, &s.LastImportError,
 			&s.CreatedAt, &s.UpdatedAt, &s.ChannelCount, &s.ProgrammeCount); err != nil {
@@ -136,11 +146,11 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 func (r *SourceRepository) GetByID(ctx context.Context, id int) (*models.Source, error) {
 	var s models.Source
 	err := r.db.QueryRow(ctx,
-		`SELECT id, name, source_url, refresh_interval_minutes, history_days,
+		`SELECT id, name, source_url, enabled, refresh_interval_minutes, history_days,
 		        COALESCE(generator_info_name, ''), COALESCE(generator_info_url, ''),
 		        last_import_at, COALESCE(last_import_status, ''), COALESCE(last_import_error, ''), created_at, updated_at
 		 FROM sources WHERE id = $1`, id,
-	).Scan(&s.ID, &s.Name, &s.SourceURL, &s.RefreshIntervalMinutes, &s.HistoryDays, &s.GeneratorInfoName, &s.GeneratorInfoURL,
+	).Scan(&s.ID, &s.Name, &s.SourceURL, &s.Enabled, &s.RefreshIntervalMinutes, &s.HistoryDays, &s.GeneratorInfoName, &s.GeneratorInfoURL,
 		&s.LastImportAt, &s.LastImportStatus, &s.LastImportError, &s.CreatedAt, &s.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil

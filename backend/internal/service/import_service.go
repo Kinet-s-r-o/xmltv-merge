@@ -24,6 +24,8 @@ type ImportService struct {
 	progRepo    *repository.ProgrammeRepository
 }
 
+var ErrSourceDisabled = fmt.Errorf("source is disabled")
+
 var sourceHTTPClient = &http.Client{Timeout: 5 * time.Minute}
 
 func (s *ImportService) ImportURL(ctx context.Context, source models.Source) error {
@@ -114,6 +116,9 @@ func (s *ImportService) RefreshSource(ctx context.Context, id int) (bool, error)
 	}
 	if source == nil {
 		return false, nil
+	}
+	if !source.Enabled {
+		return true, ErrSourceDisabled
 	}
 	if err := s.ImportURL(ctx, *source); err != nil {
 		return true, err

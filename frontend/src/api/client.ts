@@ -17,6 +17,7 @@ export interface Source {
   id: number
   name: string
   source_url: string
+  enabled: boolean
   refresh_interval_minutes: number
   history_days: number
   generator_info_name?: string
@@ -141,6 +142,12 @@ export const api = {
   deleteSource: (id: number) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
 
   refreshSource: (id: number) => request<{ status: string }>(`/sources/${id}/refresh`, { method: 'POST' }),
+
+  setSourceEnabled: (id: number, enabled: boolean) =>
+    request<void>(`/sources/${id}/activation`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    }),
 
   channels: (params?: { source_id?: number; search?: string }) => {
     const qs = new URLSearchParams()

@@ -58,6 +58,7 @@ func main() {
 	r.Put("/api/v1/sources/{id}", h.UpdateSource)
 	r.Delete("/api/v1/sources/{id}", h.DeleteSource)
 	r.Post("/api/v1/sources/{id}/refresh", h.RefreshSource)
+	r.Patch("/api/v1/sources/{id}/activation", h.SetSourceEnabled)
 	r.Get("/api/v1/channels", h.ListChannels)
 	r.Get("/api/v1/channels/{id}", h.GetChannel)
 	r.Get("/api/v1/programmes", h.ListProgrammes)

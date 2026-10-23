@@ -6,6 +6,7 @@ type Source struct {
 	ID                     int        `json:"id"`
 	Name                   string     `json:"name"`
 	SourceURL              string     `json:"source_url"`
+	Enabled                bool       `json:"enabled"`
 	RefreshIntervalMinutes int        `json:"refresh_interval_minutes"`
 	HistoryDays            int        `json:"history_days"`
 	GeneratorInfoName      string     `json:"generator_info_name,omitempty"`

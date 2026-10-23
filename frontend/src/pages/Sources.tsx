@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2, Pencil, Save, X, Search } from 'lucide-react'
+import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2, Pencil, Save, X, Search, Power } from 'lucide-react'
 import { api, CreateSourceInput, Source } from '../api/client'
 
 export function Sources() {
@@ -68,6 +68,15 @@ export function Sources() {
       queryClient.invalidateQueries({ queryKey: ['sources'] })
       queryClient.invalidateQueries({ queryKey: ['channels'] })
       queryClient.invalidateQueries({ queryKey: ['programmes'] })
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
+  const activationMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => api.setSourceEnabled(id, enabled),
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -227,6 +236,22 @@ export function Sources() {
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={source.enabled}
+                    aria-label={`${source.enabled ? 'Disable' : 'Enable'} ${source.name}`}
+                    title={source.enabled ? 'Disable source' : 'Enable source'}
+                    onClick={() => {
+                      setError(null)
+                      activationMutation.mutate({ id: source.id, enabled: !source.enabled })
+                    }}
+                    disabled={activationMutation.isPending && activationMutation.variables?.id === source.id}
+                    className={`group relative h-7 w-12 shrink-0 rounded-full p-0.5 shadow-inner transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-wait disabled:opacity-60 ${source.enabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+                  >
+                    <span className={`block h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] transition-transform duration-200 ease-out ${source.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <Power className="sr-only" />
+                  </button>
                   <div className="text-right text-xs text-zinc-500">
                     <p className="flex items-center justify-end gap-1">
                       <Clock3 className="w-3 h-3" /> Last update: {source.last_import_at ? new Date(source.last_import_at).toLocaleString() : 'Pending'}
