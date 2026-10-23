@@ -47,6 +47,7 @@ func main() {
 	}))
 
 	r.Get("/api/v1/health", h.Health)
+	r.Head("/api/v1/health", h.Health)
 	r.Post("/api/v1/import", h.Import)
 	r.Get("/api/v1/sources", h.ListSources)
 	r.Get("/api/v1/channels", h.ListChannels)
