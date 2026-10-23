@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2, Pencil, Save, X } from 'lucide-react'
+import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2, Pencil, Save, X, Search } from 'lucide-react'
 import { api, CreateSourceInput, Source } from '../api/client'
 
 export function Sources() {
@@ -12,6 +12,7 @@ export function Sources() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [sourceSearch, setSourceSearch] = useState('')
 
   const { data: sources, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
@@ -71,6 +72,11 @@ export function Sources() {
     onError: (err: Error) => setError(err.message),
   })
 
+  const filteredSources = (sources ?? []).filter((source) => {
+    const query = sourceSearch.trim().toLocaleLowerCase()
+    return !query || source.name.toLocaleLowerCase().includes(query) || source.source_url.toLocaleLowerCase().includes(query)
+  })
+
   const handleDelete = (id: number, sourceName: string) => {
     if (window.confirm(`Delete source "${sourceName}" and all its channels and programmes? This cannot be undone.`)) {
       setError(null)
@@ -106,20 +112,20 @@ export function Sources() {
             addMutation.mutate()
           }
         }}
-        className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-4"
+        className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3"
       >
-        <div className="grid gap-4 md:grid-cols-3">
-          <label className="text-sm text-zinc-400 space-y-2">
+        <div className="grid items-end gap-3 lg:grid-cols-[minmax(140px,2fr)_minmax(260px,5fr)_minmax(130px,1.5fr)_minmax(130px,1.5fr)_auto_auto]">
+          <label className="text-xs text-zinc-400">
             Source name
             <input
               required
               value={name}
               onChange={(e) => { setName(e.target.value); setSuccess(false) }}
               placeholder="e.g. My EPG"
-              className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
+              className="mt-1 w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
             />
           </label>
-          <label className="text-sm text-zinc-400 space-y-2 md:col-span-2">
+          <label className="text-xs text-zinc-400">
             XMLTV URL
             <input
               required
@@ -127,14 +133,12 @@ export function Sources() {
               value={url}
               onChange={(e) => { setUrl(e.target.value); setSuccess(false) }}
               placeholder="https://example.com/epg.xml"
-              className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
+              className="mt-1 w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
             />
           </label>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-sm text-zinc-400 space-y-2">
+          <label className="text-xs text-zinc-400">
             Update every
-            <span className="flex items-center gap-2">
+            <span className="mt-1 flex items-center gap-2">
               <input
                 type="number"
                 min={1}
@@ -146,9 +150,9 @@ export function Sources() {
               hours
             </span>
           </label>
-          <label className="text-sm text-zinc-400 space-y-2">
+          <label className="text-xs text-zinc-400">
             Keep history
-            <span className="flex items-center gap-2">
+            <span className="mt-1 flex items-center gap-2">
               <input
                 type="number"
                 min={1}
@@ -163,17 +167,17 @@ export function Sources() {
           <button
             type="submit"
             disabled={!name.trim() || !url.trim() || intervalHours < 1 || intervalHours > 168 || historyDays < 1 || historyDays > 3650 || addMutation.isPending || updateMutation.isPending}
-            className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg transition-colors flex items-center gap-2"
+            className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             {editingId !== null ? <Save className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
             {updateMutation.isPending ? 'Saving...' : addMutation.isPending ? 'Adding...' : editingId !== null ? 'Save changes' : 'Add source'}
           </button>
           {editingId !== null && (
-            <button type="button" onClick={() => { setEditingId(null); setName(''); setUrl(''); setHistoryDays(7) }} className="px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded-lg flex items-center gap-1">
+            <button type="button" onClick={() => { setEditingId(null); setName(''); setUrl(''); setHistoryDays(7) }} className="px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded-lg flex items-center justify-center gap-1">
               <X className="w-4 h-4" /> Cancel
             </button>
           )}
-          {success && <span className="text-sm text-emerald-400">Source added; first download is scheduled.</span>}
+          {success && <span className="text-xs text-emerald-400 lg:col-span-full">Source added; first download is scheduled.</span>}
         </div>
       </form>
 
@@ -185,8 +189,18 @@ export function Sources() {
       )}
 
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl">
-        <div className="p-4 border-b border-zinc-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-zinc-800">
           <h2 className="text-sm font-medium text-zinc-300">Existing Sources</h2>
+          <label className="relative block w-full max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            <input
+              type="search"
+              value={sourceSearch}
+              onChange={(event) => setSourceSearch(event.target.value)}
+              placeholder="Search sources..."
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:outline-none"
+            />
+          </label>
         </div>
         {isLoading ? (
           <div className="p-6 text-center text-zinc-500">Loading...</div>
@@ -197,9 +211,9 @@ export function Sources() {
               Retry
             </button>
           </div>
-        ) : sources && sources.length > 0 ? (
+        ) : filteredSources.length > 0 ? (
           <div className="divide-y divide-zinc-800">
-            {sources.map((source) => (
+            {filteredSources.map((source) => (
               <div key={source.id} className="p-4 flex flex-wrap items-center justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-zinc-200">{source.name}</p>
@@ -259,7 +273,7 @@ export function Sources() {
             ))}
           </div>
         ) : (
-          <div className="p-6 text-center text-zinc-500">No sources yet.</div>
+          <div className="p-6 text-center text-zinc-500">{sourceSearch ? 'No sources match this search.' : 'No sources yet.'}</div>
         )}
       </div>
     </div>
