@@ -92,16 +92,18 @@ export function EPGView() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">EPG</h1>
-          <p className="text-sm text-zinc-400 mt-1">{format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setSelectedDate((date) => addDays(date, -1))} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Previous day">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button onClick={() => setSelectedDate(new Date())} className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Today</button>
-          <button onClick={() => setSelectedDate((date) => addDays(date, 1))} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Next day">
-            <ChevronRight className="w-4 h-4" />
-          </button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelectedDate((date) => addDays(date, -1))} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Previous day">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button onClick={() => setSelectedDate(new Date())} className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Today</button>
+            <button onClick={() => setSelectedDate((date) => addDays(date, 1))} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Next day">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-sm text-zinc-400">{format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
         </div>
       </div>
 
