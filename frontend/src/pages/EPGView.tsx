@@ -21,13 +21,14 @@ export function EPGView() {
     queryFn: () => api.sources(),
   })
 
-  const { data: allChannels = [], isLoading: channelsLoading } = useQuery({
+  const { data: channelData, isLoading: channelsLoading } = useQuery({
     queryKey: ['channels', selectedSource, search],
     queryFn: () => api.channels({
       source_id: selectedSource ?? undefined,
       search: search.trim() || undefined,
     }),
   })
+  const allChannels = channelData ?? []
 
   const pageCount = Math.max(1, Math.ceil(allChannels.length / CHANNELS_PER_PAGE))
   const currentPage = Math.min(page, pageCount)

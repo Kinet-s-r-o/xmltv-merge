@@ -76,7 +76,7 @@ func (r *ChannelRepository) List(ctx context.Context, sourceID *int, search stri
 	}
 	defer rows.Close()
 
-	var channels []models.Channel
+	channels := make([]models.Channel, 0)
 	for rows.Next() {
 		var c models.Channel
 		if err := rows.Scan(&c.ID, &c.SourceID, &c.ExternalID, &c.Name, &c.NameLang, &c.IconURL, &c.URL, &c.CreatedAt); err != nil {
