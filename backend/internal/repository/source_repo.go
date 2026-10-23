@@ -87,12 +87,9 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 		        COALESCE(s.generator_info_name, ''), COALESCE(s.generator_info_url, ''),
 		        s.last_import_at, COALESCE(s.last_import_status, ''), COALESCE(s.last_import_error, ''),
 		        s.created_at, s.updated_at,
-		        COUNT(DISTINCT c.id) as channel_count,
-		        COUNT(DISTINCT p.id) as programme_count
+		        (SELECT COUNT(*) FROM channels c WHERE c.source_id = s.id) AS channel_count,
+		        (SELECT COUNT(*) FROM programmes p WHERE p.source_id = s.id) AS programme_count
 		 FROM sources s
-		 LEFT JOIN channels c ON c.source_id = s.id
-		 LEFT JOIN programmes p ON p.source_id = s.id
-		 GROUP BY s.id
 		 ORDER BY s.name`)
 	if err != nil {
 		return nil, err

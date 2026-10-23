@@ -96,8 +96,13 @@ func (r *ProgrammeRepository) InsertCategories(ctx context.Context, programmeID 
 func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channelID *int, sourceID *int, page, limit int) ([]models.Programme, int, error) {
 	query := `SELECT p.id, p.source_id, p.channel_id, p.start_time, p.stop_time,
 		        p.subtitle, p.subtitle_lang, p.description, p.description_lang,
-		        p.country, p.year, p.episode_num, p.episode_num_system, p.icon_url, p.created_at
-		 FROM programmes p WHERE 1=1`
+		        p.country, p.year, p.episode_num, p.episode_num_system, p.icon_url, p.created_at,
+		        COALESCE(title.lang, ''), COALESCE(title.title, '')
+		 FROM programmes p
+		 LEFT JOIN LATERAL (
+			SELECT lang, title FROM programme_titles WHERE programme_id = p.id ORDER BY lang LIMIT 1
+		 ) title ON TRUE
+		 WHERE 1=1`
 	countQuery := `SELECT COUNT(*) FROM programmes p WHERE 1=1`
 	args := []interface{}{}
 	argNum := 1
@@ -138,10 +143,15 @@ func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channel
 	var programmes []models.Programme
 	for rows.Next() {
 		var p models.Programme
+		var titleLang, titleText string
 		if err := rows.Scan(&p.ID, &p.SourceID, &p.ChannelID, &p.StartTime, &p.StopTime,
 			&p.Subtitle, &p.SubtitleLang, &p.Description, &p.DescriptionLang,
-			&p.Country, &p.Year, &p.EpisodeNum, &p.EpisodeNumSys, &p.IconURL, &p.CreatedAt); err != nil {
+			&p.Country, &p.Year, &p.EpisodeNum, &p.EpisodeNumSys, &p.IconURL, &p.CreatedAt,
+			&titleLang, &titleText); err != nil {
 			return nil, 0, err
+		}
+		if titleText != "" {
+			p.Titles = []models.Title{{ProgrammeID: p.ID, Lang: titleLang, Title: titleText}}
 		}
 		programmes = append(programmes, p)
 	}
@@ -218,4 +228,3 @@ func (r *ProgrammeRepository) GetByID(ctx context.Context, id int64) (*models.Pr
 
 	return &p, nil
 }
-
