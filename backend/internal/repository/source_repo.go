@@ -84,8 +84,8 @@ func (r *SourceRepository) UpdateImportStatus(ctx context.Context, id int, statu
 func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT s.id, s.name, s.source_url, s.refresh_interval_minutes,
-		        s.generator_info_name, s.generator_info_url,
-		        s.last_import_at, s.last_import_status, s.last_import_error,
+		        COALESCE(s.generator_info_name, ''), COALESCE(s.generator_info_url, ''),
+		        s.last_import_at, COALESCE(s.last_import_status, ''), COALESCE(s.last_import_error, ''),
 		        s.created_at, s.updated_at,
 		        COUNT(DISTINCT c.id) as channel_count,
 		        COUNT(DISTINCT p.id) as programme_count
@@ -116,8 +116,8 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 func (r *SourceRepository) GetByID(ctx context.Context, id int) (*models.Source, error) {
 	var s models.Source
 	err := r.db.QueryRow(ctx,
-		`SELECT id, name, generator_info_name, generator_info_url,
-		        last_import_at, last_import_status, last_import_error, created_at, updated_at
+		`SELECT id, name, COALESCE(generator_info_name, ''), COALESCE(generator_info_url, ''),
+		        last_import_at, COALESCE(last_import_status, ''), COALESCE(last_import_error, ''), created_at, updated_at
 		 FROM sources WHERE id = $1`, id,
 	).Scan(&s.ID, &s.Name, &s.GeneratorInfoName, &s.GeneratorInfoURL,
 		&s.LastImportAt, &s.LastImportStatus, &s.LastImportError, &s.CreatedAt, &s.UpdatedAt)
