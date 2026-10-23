@@ -150,10 +150,11 @@ export const api = {
 
   channel: (id: number) => request<Channel>(`/channels/${id}`),
 
-  programmes: (params?: { date?: string; channel_id?: number; source_id?: number; page?: number; limit?: number }) => {
+  programmes: (params?: { date?: string; channel_id?: number; channel_ids?: number[]; source_id?: number; page?: number; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.date) qs.set('date', params.date)
     if (params?.channel_id) qs.set('channel_id', String(params.channel_id))
+    if (params?.channel_ids?.length) qs.set('channel_ids', params.channel_ids.join(','))
     if (params?.source_id) qs.set('source_id', String(params.source_id))
     if (params?.page) qs.set('page', String(params.page))
     if (params?.limit) qs.set('limit', String(params.limit))

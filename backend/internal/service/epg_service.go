@@ -42,8 +42,8 @@ func (s *EPGService) GetChannel(ctx context.Context, id int) (*models.Channel, e
 	return s.channelRepo.GetByID(ctx, id)
 }
 
-func (s *EPGService) GetProgrammes(ctx context.Context, date *time.Time, channelID *int, sourceID *int, page, limit int) ([]models.Programme, int, error) {
-	return s.progRepo.List(ctx, date, channelID, sourceID, page, limit)
+func (s *EPGService) GetProgrammes(ctx context.Context, date *time.Time, channelID *int, channelIDs []int, sourceID *int, page, limit int) ([]models.Programme, int, error) {
+	return s.progRepo.List(ctx, date, channelID, channelIDs, sourceID, page, limit)
 }
 
 func (s *EPGService) GetProgramme(ctx context.Context, id int64) (*models.Programme, error) {

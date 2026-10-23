@@ -116,7 +116,7 @@ func (r *ProgrammeRepository) InsertCategories(ctx context.Context, programmeID 
 	return nil
 }
 
-func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channelID *int, sourceID *int, page, limit int) ([]models.Programme, int, error) {
+func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channelID *int, channelIDs []int, sourceID *int, page, limit int) ([]models.Programme, int, error) {
 	query := `SELECT p.id, p.source_id, p.channel_id, p.start_time, p.stop_time,
 		        p.subtitle, p.subtitle_lang, p.description, p.description_lang,
 		        p.country, p.year, p.episode_num, p.episode_num_system, p.icon_url, p.created_at,
@@ -140,6 +140,12 @@ func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channel
 		query += fmt.Sprintf(" AND p.channel_id = $%d", argNum)
 		countQuery += fmt.Sprintf(" AND p.channel_id = $%d", argNum)
 		args = append(args, *channelID)
+		argNum++
+	}
+	if len(channelIDs) > 0 {
+		query += fmt.Sprintf(" AND p.channel_id = ANY($%d)", argNum)
+		countQuery += fmt.Sprintf(" AND p.channel_id = ANY($%d)", argNum)
+		args = append(args, channelIDs)
 		argNum++
 	}
 	if sourceID != nil {

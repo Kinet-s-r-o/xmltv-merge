@@ -8,18 +8,20 @@ import { api, Programme } from '../api/client'
 const HOUR_WIDTH = 150
 const STATION_WIDTH = 220
 const HOURS_PER_DAY = 24
+const CHANNELS_PER_PAGE = 40
 
 export function EPGView() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedSource, setSelectedSource] = useState<number | null>(null)
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
 
   const { data: sources = [] } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
   })
 
-  const { data: channels = [], isLoading: channelsLoading } = useQuery({
+  const { data: allChannels = [], isLoading: channelsLoading } = useQuery({
     queryKey: ['channels', selectedSource, search],
     queryFn: () => api.channels({
       source_id: selectedSource ?? undefined,
@@ -27,13 +29,20 @@ export function EPGView() {
     }),
   })
 
+  const pageCount = Math.max(1, Math.ceil(allChannels.length / CHANNELS_PER_PAGE))
+  const currentPage = Math.min(page, pageCount)
+  const channels = useMemo(() => allChannels.slice((currentPage - 1) * CHANNELS_PER_PAGE, currentPage * CHANNELS_PER_PAGE), [allChannels, currentPage])
+  const channelIds = channels.map((channel) => channel.id)
+
   const { data: programmes, isLoading: programmesLoading } = useQuery({
-    queryKey: ['programmes', format(selectedDate, 'yyyy-MM-dd'), selectedSource],
+    queryKey: ['programmes', format(selectedDate, 'yyyy-MM-dd'), selectedSource, channelIds],
     queryFn: () => api.programmes({
       date: format(selectedDate, 'yyyy-MM-dd'),
       source_id: selectedSource ?? undefined,
-      limit: 20000,
+      channel_ids: channelIds,
+      limit: 5000,
     }),
+    enabled: channelIds.length > 0,
   })
 
   const programmesByChannel = useMemo(() => {
@@ -83,7 +92,7 @@ export function EPGView() {
       <div className="flex flex-wrap items-center gap-3">
         <select
           value={selectedSource ?? ''}
-          onChange={(event) => setSelectedSource(event.target.value ? Number(event.target.value) : null)}
+          onChange={(event) => { setSelectedSource(event.target.value ? Number(event.target.value) : null); setPage(1) }}
           className="px-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 focus:outline-none focus:border-indigo-500/50"
           aria-label="Filter by source"
         >
@@ -95,12 +104,17 @@ export function EPGView() {
           <input
             type="search"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => { setSearch(event.target.value); setPage(1) }}
             placeholder="Search stations..."
             className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
           />
         </label>
-        <span className="text-xs text-zinc-500">{channels.length} stations</span>
+        <span className="text-xs text-zinc-500">{allChannels.length} stations</span>
+        <div className="ml-auto flex items-center gap-2 text-xs text-zinc-400">
+          <span>{allChannels.length === 0 ? '0' : `${(currentPage - 1) * CHANNELS_PER_PAGE + 1}–${Math.min(currentPage * CHANNELS_PER_PAGE, allChannels.length)} of ${allChannels.length}`}</span>
+          <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="rounded p-1 hover:bg-zinc-800 disabled:opacity-40" aria-label="Previous stations"><ChevronLeft className="h-4 w-4" /></button>
+          <button onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount} className="rounded p-1 hover:bg-zinc-800 disabled:opacity-40" aria-label="Next stations"><ChevronRight className="h-4 w-4" /></button>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto bg-zinc-900/50 border border-zinc-800 rounded-xl">

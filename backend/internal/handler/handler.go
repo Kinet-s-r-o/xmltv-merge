@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -171,6 +172,17 @@ func (h *Handler) ListProgrammes(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.Atoi(cid)
 		channelID = &id
 	}
+	var channelIDs []int
+	if ids := q.Get("channel_ids"); ids != "" {
+		for _, value := range strings.Split(ids, ",") {
+			id, err := strconv.Atoi(value)
+			if err != nil || id < 1 {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid channel_ids"})
+				return
+			}
+			channelIDs = append(channelIDs, id)
+		}
+	}
 
 	var sourceID *int
 	if sid := q.Get("source_id"); sid != "" {
@@ -187,7 +199,7 @@ func (h *Handler) ListProgrammes(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 
-	programmes, total, err := h.epgSvc.GetProgrammes(r.Context(), date, channelID, sourceID, page, limit)
+	programmes, total, err := h.epgSvc.GetProgrammes(r.Context(), date, channelID, channelIDs, sourceID, page, limit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
