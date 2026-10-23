@@ -25,6 +25,7 @@ export function EPGView() {
         limit: 500,
       }),
   })
+  const programmeData = programmes?.data ?? []
 
   const handleDateChange = (days: number) => {
     setSelectedDate((d) => addDays(d, days))
@@ -96,7 +97,7 @@ export function EPGView() {
       <div className="flex-1 overflow-auto bg-zinc-900/50 border border-zinc-800 rounded-xl">
         {isLoading ? (
           <div className="p-8 text-center text-zinc-500">Loading programmes...</div>
-        ) : programmes && programmes.data.length > 0 ? (
+        ) : programmeData.length > 0 ? (
           <div className="relative" style={{ height: 24 * HOUR_HEIGHT }}>
             <div className="absolute left-0 top-0 w-16 h-full border-r border-zinc-800 bg-zinc-900/80">
               {Array.from({ length: 24 }, (_, i) => (
@@ -106,7 +107,7 @@ export function EPGView() {
               ))}
             </div>
             <div className="absolute left-16 right-0 top-0 h-full">
-              {programmes.data.map((p) => (
+              {programmeData.map((p) => (
                 <Link
                   key={p.id}
                   to={`/programmes/${p.id}`}

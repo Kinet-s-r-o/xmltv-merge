@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"xmltv-merge/internal/models"
 	"xmltv-merge/internal/service"
 )
 
@@ -125,6 +126,9 @@ func (h *Handler) ListProgrammes(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	if programmes == nil {
+		programmes = []models.Programme{}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
