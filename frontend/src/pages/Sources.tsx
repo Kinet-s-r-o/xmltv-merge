@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2 } from 'lucide-react'
-import { api } from '../api/client'
+import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2, Pencil, Save, X } from 'lucide-react'
+import { api, CreateSourceInput, Source } from '../api/client'
 
 export function Sources() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [intervalHours, setIntervalHours] = useState(6)
+  const [historyDays, setHistoryDays] = useState(7)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   const { data: sources, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
@@ -22,6 +24,7 @@ export function Sources() {
       name: name.trim(),
       url: url.trim(),
       refresh_interval_minutes: intervalHours * 60,
+      history_days: historyDays,
     }),
     onSuccess: () => {
       setName('')
@@ -45,11 +48,33 @@ export function Sources() {
     onError: (err: Error) => setError(err.message),
   })
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, source }: { id: number; source: CreateSourceInput }) =>
+      api.updateSource(id, source),
+    onSuccess: () => {
+      setEditingId(null)
+      setName('')
+      setUrl('')
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
   const handleDelete = (id: number, sourceName: string) => {
     if (window.confirm(`Delete source "${sourceName}" and all its channels and programmes? This cannot be undone.`)) {
       setError(null)
       deleteMutation.mutate(id)
     }
+  }
+
+  const handleEdit = (source: Source) => {
+    setEditingId(source.id)
+    setName(source.name)
+    setUrl(source.source_url)
+    setIntervalHours(source.refresh_interval_minutes / 60)
+    setHistoryDays(source.history_days)
+    setError(null)
   }
 
   return (
@@ -60,7 +85,17 @@ export function Sources() {
       </div>
 
       <form
-        onSubmit={(e) => { e.preventDefault(); addMutation.mutate() }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (editingId !== null) {
+            updateMutation.mutate({
+              id: editingId,
+              source: { name: name.trim(), url: url.trim(), refresh_interval_minutes: intervalHours * 60, history_days: historyDays },
+            })
+          } else {
+            addMutation.mutate()
+          }
+        }}
         className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-4"
       >
         <div className="grid gap-4 md:grid-cols-3">
@@ -101,14 +136,33 @@ export function Sources() {
               hours
             </span>
           </label>
+          <label className="text-sm text-zinc-400 space-y-2">
+            Keep history
+            <span className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={3650}
+                value={historyDays}
+                onChange={(e) => setHistoryDays(Number(e.target.value))}
+                className="w-24 px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+              />
+              days
+            </span>
+          </label>
           <button
             type="submit"
-            disabled={!name.trim() || !url.trim() || intervalHours < 1 || intervalHours > 168 || addMutation.isPending}
+            disabled={!name.trim() || !url.trim() || intervalHours < 1 || intervalHours > 168 || historyDays < 1 || historyDays > 3650 || addMutation.isPending || updateMutation.isPending}
             className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg transition-colors flex items-center gap-2"
           >
-            <Link2 className="w-4 h-4" />
-            {addMutation.isPending ? 'Adding...' : 'Add source'}
+            {editingId !== null ? <Save className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
+            {updateMutation.isPending ? 'Saving...' : addMutation.isPending ? 'Adding...' : editingId !== null ? 'Save changes' : 'Add source'}
           </button>
+          {editingId !== null && (
+            <button type="button" onClick={() => { setEditingId(null); setName(''); setUrl(''); setHistoryDays(7) }} className="px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded-lg flex items-center gap-1">
+              <X className="w-4 h-4" /> Cancel
+            </button>
+          )}
           {success && <span className="text-sm text-emerald-400">Source added; first download is scheduled.</span>}
         </div>
       </form>
@@ -145,7 +199,7 @@ export function Sources() {
                     </a>
                   )}
                   <p className="text-xs text-zinc-500 mt-1">
-                    {source.channel_count} channels · {source.programme_count} programmes · every {source.refresh_interval_minutes / 60}h
+                    {source.channel_count} channels · {source.programme_count} programmes · every {source.refresh_interval_minutes / 60}h · keep {source.history_days} days
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
@@ -161,6 +215,15 @@ export function Sources() {
                     )}
                     {source.last_import_error && <p className="text-red-400 max-w-md">{source.last_import_error}</p>}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(source)}
+                    aria-label={`Edit ${source.name}`}
+                    title="Edit source"
+                    className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(source.id, source.name)}

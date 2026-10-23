@@ -55,6 +55,7 @@ func main() {
 	r.Post("/api/v1/import", h.Import)
 	r.Get("/api/v1/sources", h.ListSources)
 	r.Post("/api/v1/sources", h.AddSource)
+	r.Put("/api/v1/sources/{id}", h.UpdateSource)
 	r.Delete("/api/v1/sources/{id}", h.DeleteSource)
 	r.Get("/api/v1/channels", h.ListChannels)
 	r.Get("/api/v1/channels/{id}", h.GetChannel)

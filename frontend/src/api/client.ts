@@ -18,6 +18,7 @@ export interface Source {
   name: string
   source_url: string
   refresh_interval_minutes: number
+  history_days: number
   generator_info_name?: string
   generator_info_url?: string
   last_import_at?: string
@@ -95,6 +96,7 @@ export interface CreateSourceInput {
   name: string
   url: string
   refresh_interval_minutes: number
+  history_days: number
 }
 
 export interface Paginated<T> {
@@ -127,6 +129,12 @@ export const api = {
   addSource: (source: CreateSourceInput) =>
     request<{ id: number; status: string }>('/sources', {
       method: 'POST',
+      body: JSON.stringify(source),
+    }),
+
+  updateSource: (id: number, source: CreateSourceInput) =>
+    request<void>(`/sources/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(source),
     }),
 

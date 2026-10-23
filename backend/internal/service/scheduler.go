@@ -10,25 +10,46 @@ import (
 )
 
 type Scheduler struct {
-	sources *repository.SourceRepository
-	imports *ImportService
+	sources    *repository.SourceRepository
+	programmes *repository.ProgrammeRepository
+	imports    *ImportService
 }
 
 func NewScheduler(db *pgxpool.Pool, imports *ImportService) *Scheduler {
-	return &Scheduler{sources: repository.NewSourceRepository(db), imports: imports}
+	return &Scheduler{
+		sources:    repository.NewSourceRepository(db),
+		programmes: repository.NewProgrammeRepository(db),
+		imports:    imports,
+	}
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
 	s.runDue(ctx)
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
+	s.cleanupHistory(ctx)
+	importTicker := time.NewTicker(time.Minute)
+	defer importTicker.Stop()
+	housekeepingTicker := time.NewTicker(time.Hour)
+	defer housekeepingTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-importTicker.C:
 			s.runDue(ctx)
+		case <-housekeepingTicker.C:
+			s.cleanupHistory(ctx)
 		}
+	}
+}
+
+func (s *Scheduler) cleanupHistory(ctx context.Context) {
+	deleted, err := s.programmes.CleanupHistory(ctx)
+	if err != nil {
+		log.Printf("scheduler: clean programme history: %v", err)
+		return
+	}
+	if deleted > 0 {
+		log.Printf("scheduler: removed %d programmes outside source retention periods", deleted)
 	}
 }
 

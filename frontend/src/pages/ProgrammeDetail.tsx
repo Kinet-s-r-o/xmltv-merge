@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ArrowLeft, MapPin, Calendar, Film } from 'lucide-react'
@@ -6,6 +6,9 @@ import { api } from '../api/client'
 
 export function ProgrammeDetail() {
   const { id } = useParams<{ id: string }>()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const backTo = (location.state as { from?: string } | null)?.from ?? '/epg'
   const programmeId = Number(id)
 
   const { data: programme, isLoading } = useQuery({
@@ -26,7 +29,7 @@ export function ProgrammeDetail() {
   return (
     <div className="p-6 space-y-6">
       {/* Back */}
-      <button className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200">
+      <button onClick={() => navigate(backTo)} className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200">
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
 

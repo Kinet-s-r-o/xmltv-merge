@@ -69,9 +69,12 @@ func NewImportService(db *pgxpool.Pool) *ImportService {
 	}
 }
 
-func (s *ImportService) AddURLSource(ctx context.Context, name, sourceURL string, intervalMinutes int) (int, error) {
+func (s *ImportService) AddURLSource(ctx context.Context, name, sourceURL string, intervalMinutes, historyDays int) (int, error) {
 	name = strings.TrimSpace(name)
 	sourceURL = strings.TrimSpace(sourceURL)
+	if historyDays == 0 {
+		historyDays = 7
+	}
 	parsed, err := url.ParseRequestURI(sourceURL)
 	if name == "" || err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return 0, fmt.Errorf("name and a valid HTTP or HTTPS source URL are required")
@@ -79,7 +82,29 @@ func (s *ImportService) AddURLSource(ctx context.Context, name, sourceURL string
 	if intervalMinutes < 5 || intervalMinutes > 10080 {
 		return 0, fmt.Errorf("refresh interval must be between 5 and 10080 minutes")
 	}
-	return s.sourceRepo.SaveURL(ctx, name, sourceURL, intervalMinutes)
+	if historyDays < 1 || historyDays > 3650 {
+		return 0, fmt.Errorf("history retention must be between 1 and 3650 days")
+	}
+	return s.sourceRepo.SaveURL(ctx, name, sourceURL, intervalMinutes, historyDays)
+}
+
+func (s *ImportService) UpdateURLSource(ctx context.Context, id int, name, sourceURL string, intervalMinutes, historyDays int) (bool, error) {
+	name = strings.TrimSpace(name)
+	sourceURL = strings.TrimSpace(sourceURL)
+	if historyDays == 0 {
+		historyDays = 7
+	}
+	parsed, err := url.ParseRequestURI(sourceURL)
+	if name == "" || err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return false, fmt.Errorf("name and a valid HTTP or HTTPS source URL are required")
+	}
+	if intervalMinutes < 5 || intervalMinutes > 10080 {
+		return false, fmt.Errorf("refresh interval must be between 5 and 10080 minutes")
+	}
+	if historyDays < 1 || historyDays > 3650 {
+		return false, fmt.Errorf("history retention must be between 1 and 3650 days")
+	}
+	return s.sourceRepo.UpdateURL(ctx, id, name, sourceURL, intervalMinutes, historyDays)
 }
 
 type ImportResult struct {
@@ -142,10 +167,22 @@ func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName 
 		}
 		channelMap[ch.ExternalID] = id
 	}
+	channelIDs := make([]int, 0, len(channelMap))
+	for _, id := range channelMap {
+		channelIDs = append(channelIDs, id)
+	}
+	now := time.Now().UTC()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if err := s.progRepo.DeleteCurrentAndFuture(ctx, sourceID, channelIDs, todayStart); err != nil {
+		return nil, fmt.Errorf("replace current and future programme data: %w", err)
+	}
 
-	// Upsert programmes
+	// Import only today's and future programmes; older schedules remain unchanged.
 	progCount := 0
 	for _, pp := range result.Programmes {
+		if pp.StartTime.Before(todayStart) {
+			continue
+		}
 		channelID, ok := channelMap[pp.ChannelExternalID]
 		if !ok {
 			// Channel not found, skip

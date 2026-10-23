@@ -19,6 +19,29 @@ func NewProgrammeRepository(db *pgxpool.Pool) *ProgrammeRepository {
 	return &ProgrammeRepository{db: db}
 }
 
+func (r *ProgrammeRepository) DeleteCurrentAndFuture(ctx context.Context, sourceID int, channelIDs []int, from time.Time) error {
+	if len(channelIDs) == 0 {
+		return nil
+	}
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM programmes
+		 WHERE source_id = $1 AND channel_id = ANY($2::int[]) AND start_time >= $3`,
+		sourceID, channelIDs, from,
+	)
+	return err
+}
+
+func (r *ProgrammeRepository) CleanupHistory(ctx context.Context) (int64, error) {
+	result, err := r.db.Exec(ctx,
+		`DELETE FROM programmes p USING sources s
+		 WHERE p.source_id = s.id
+		   AND p.start_time < now() - (s.history_days * interval '1 day')`)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 func (r *ProgrammeRepository) Upsert(ctx context.Context, sourceID, channelID int, startTime, stopTime time.Time,
 	subtitle, subtitleLang, desc, descLang, country, iconURL, epNum, epNumSys string, year *int16) (int64, error) {
 

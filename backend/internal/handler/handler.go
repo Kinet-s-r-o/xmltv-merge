@@ -65,17 +65,46 @@ func (h *Handler) AddSource(w http.ResponseWriter, r *http.Request) {
 		Name                   string `json:"name"`
 		URL                    string `json:"url"`
 		RefreshIntervalMinutes int    `json:"refresh_interval_minutes"`
+		HistoryDays            int    `json:"history_days"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	id, err := h.importSvc.AddURLSource(r.Context(), input.Name, input.URL, input.RefreshIntervalMinutes)
+	id, err := h.importSvc.AddURLSource(r.Context(), input.Name, input.URL, input.RefreshIntervalMinutes, input.HistoryDays)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "status": "scheduled"})
+}
+
+func (h *Handler) UpdateSource(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil || id < 1 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source id"})
+		return
+	}
+	var input struct {
+		Name                   string `json:"name"`
+		URL                    string `json:"url"`
+		RefreshIntervalMinutes int    `json:"refresh_interval_minutes"`
+		HistoryDays            int    `json:"history_days"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	updated, err := h.importSvc.UpdateURLSource(r.Context(), id, input.Name, input.URL, input.RefreshIntervalMinutes, input.HistoryDays)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if !updated {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "source not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) DeleteSource(w http.ResponseWriter, r *http.Request) {

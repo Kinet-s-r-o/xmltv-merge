@@ -18,22 +18,37 @@ func NewSourceRepository(db *pgxpool.Pool) *SourceRepository {
 	return &SourceRepository{db: db}
 }
 
-func (r *SourceRepository) SaveURL(ctx context.Context, name, sourceURL string, intervalMinutes int) (int, error) {
+func (r *SourceRepository) SaveURL(ctx context.Context, name, sourceURL string, intervalMinutes, historyDays int) (int, error) {
 	var id int
 	err := r.db.QueryRow(ctx,
-		`INSERT INTO sources (name, source_url, refresh_interval_minutes)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO sources (name, source_url, refresh_interval_minutes, history_days)
+		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (name) DO UPDATE SET source_url = EXCLUDED.source_url,
 			refresh_interval_minutes = EXCLUDED.refresh_interval_minutes,
+			history_days = EXCLUDED.history_days,
 			last_import_at = NULL, last_import_status = NULL, last_import_error = NULL,
 			updated_at = now()
-		 RETURNING id`, name, sourceURL, intervalMinutes,
+		 RETURNING id`, name, sourceURL, intervalMinutes, historyDays,
 	).Scan(&id)
 	return id, err
 }
 
 func (r *SourceRepository) Delete(ctx context.Context, id int) (bool, error) {
 	result, err := r.db.Exec(ctx, `DELETE FROM sources WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() > 0, nil
+}
+
+func (r *SourceRepository) UpdateURL(ctx context.Context, id int, name, sourceURL string, intervalMinutes, historyDays int) (bool, error) {
+	result, err := r.db.Exec(ctx,
+		`UPDATE sources
+		 SET name = $2, source_url = $3, refresh_interval_minutes = $4, history_days = $5,
+		     last_import_at = NULL, last_import_status = NULL, last_import_error = NULL,
+		     updated_at = now()
+		 WHERE id = $1`, id, name, sourceURL, intervalMinutes, historyDays,
+	)
 	if err != nil {
 		return false, err
 	}
@@ -91,7 +106,7 @@ func (r *SourceRepository) UpdateImportStatus(ctx context.Context, id int, statu
 
 func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT s.id, s.name, s.source_url, s.refresh_interval_minutes,
+		`SELECT s.id, s.name, s.source_url, s.refresh_interval_minutes, s.history_days,
 		        COALESCE(s.generator_info_name, ''), COALESCE(s.generator_info_url, ''),
 		        s.last_import_at, COALESCE(s.last_import_status, ''), COALESCE(s.last_import_error, ''),
 		        s.created_at, s.updated_at,
@@ -107,7 +122,7 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	var sources []models.Source
 	for rows.Next() {
 		var s models.Source
-		if err := rows.Scan(&s.ID, &s.Name, &s.SourceURL, &s.RefreshIntervalMinutes,
+		if err := rows.Scan(&s.ID, &s.Name, &s.SourceURL, &s.RefreshIntervalMinutes, &s.HistoryDays,
 			&s.GeneratorInfoName, &s.GeneratorInfoURL,
 			&s.LastImportAt, &s.LastImportStatus, &s.LastImportError,
 			&s.CreatedAt, &s.UpdatedAt, &s.ChannelCount, &s.ProgrammeCount); err != nil {

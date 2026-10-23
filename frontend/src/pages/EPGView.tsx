@@ -111,6 +111,7 @@ export function EPGView() {
                 <Link
                   key={p.id}
                   to={`/programmes/${p.id}`}
+                  state={{ from: '/epg' }}
                   className="absolute left-1 right-1 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg p-2 overflow-hidden transition-colors"
                   style={{ top: getProgrammeTop(p), height: getProgrammeHeight(p) }}
                 >

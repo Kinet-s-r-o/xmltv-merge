@@ -7,6 +7,7 @@ type Source struct {
 	Name                   string     `json:"name"`
 	SourceURL              string     `json:"source_url"`
 	RefreshIntervalMinutes int        `json:"refresh_interval_minutes"`
+	HistoryDays            int        `json:"history_days"`
 	GeneratorInfoName      string     `json:"generator_info_name,omitempty"`
 	GeneratorInfoURL       string     `json:"generator_info_url,omitempty"`
 	LastImportAt           *time.Time `json:"last_import_at,omitempty"`
