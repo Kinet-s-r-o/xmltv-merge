@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"net/http"
 	"strconv"
 	"strings"
@@ -60,6 +62,239 @@ func (h *Handler) ListSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sources)
+}
+
+func (h *Handler) ListOutputs(w http.ResponseWriter, r *http.Request) {
+	outputs, err := h.epgSvc.GetOutputs(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, outputs)
+}
+
+func (h *Handler) GetOutput(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid output id"})
+		return
+	}
+	output, err := h.epgSvc.GetOutput(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if output == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "output not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, output)
+}
+
+func (h *Handler) AddOutput(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil || strings.TrimSpace(input.Name) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+	id, err := h.epgSvc.AddOutput(r.Context(), input.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]int{"id": id})
+}
+
+func (h *Handler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid output id"})
+		return
+	}
+	var input struct {
+		Name     string                 `json:"name"`
+		Channels []models.OutputChannel `json:"channels"`
+	}
+	if err = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&input); err != nil || strings.TrimSpace(input.Name) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	updated, err := h.epgSvc.UpdateOutput(r.Context(), id, input.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if !updated {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "output not found"})
+		return
+	}
+	if err = h.epgSvc.SaveOutputChannels(r.Context(), id, input.Channels); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid output id"})
+		return
+	}
+	deleted, err := h.epgSvc.DeleteOutput(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !deleted {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "output not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) OutputXML(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid output id", http.StatusBadRequest)
+		return
+	}
+	output, err := h.epgSvc.GetOutput(r.Context(), id)
+	h.writeOutputXML(w, r, output, err)
+}
+
+func (h *Handler) PublicOutputXML(w http.ResponseWriter, r *http.Request) {
+	output, err := h.epgSvc.GetOutputBySlugAndToken(r.Context(), chi.URLParam(r, "slug"), r.URL.Query().Get("token"))
+	if output == nil && err == nil {
+		http.NotFound(w, r)
+		return
+	}
+	h.writeOutputXML(w, r, output, err)
+}
+
+func (h *Handler) writeOutputXML(w http.ResponseWriter, r *http.Request, output *models.Output, err error) {
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if output == nil {
+		http.NotFound(w, r)
+		return
+	}
+	ids := make([]int, 0, len(output.Channels))
+	for _, c := range output.Channels {
+		ids = append(ids, c.ChannelID)
+	}
+	programmes, _, err := h.epgSvc.GetProgrammes(r.Context(), nil, nil, ids, nil, 1, 20000)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	feed := outputXML{XMLName: xml.Name{Local: "tv"}, Generator: "xmltv-merge / " + output.Name}
+	channelIDs := make(map[int]string, len(output.Channels))
+	for _, c := range output.Channels {
+		if c.Channel == nil {
+			continue
+		}
+		channelIDs[c.ChannelID] = c.Channel.ExternalID
+		feed.Channels = append(feed.Channels, outputXMLChannel{ID: c.Channel.ExternalID, Name: c.DisplayName})
+	}
+	for _, p := range programmes {
+		var rule *models.OutputChannel
+		for i := range output.Channels {
+			if output.Channels[i].ChannelID == p.ChannelID {
+				rule = &output.Channels[i]
+				break
+			}
+		}
+		if rule == nil {
+			continue
+		}
+		op := outputXMLProgramme{Channel: channelIDs[p.ChannelID], Start: p.StartTime.Format("20060102150405 -0700"), Stop: p.StopTime.Format("20060102150405 -0700")}
+		if rule.IncludeTitle && len(p.Titles) > 0 {
+			op.Title = p.Titles[0].Title
+		}
+		if rule.IncludeSubtitle {
+			op.Subtitle = p.Subtitle
+		}
+		if rule.IncludeDescription {
+			op.Description = p.Description
+		}
+		if rule.IncludeCountry {
+			op.Country = p.Country
+		}
+		if rule.IncludeYear && p.Year != nil {
+			op.Date = strconv.Itoa(int(*p.Year))
+		}
+		if rule.IncludeEpisodeNum {
+			op.EpisodeNum = p.EpisodeNum
+		}
+		if rule.IncludeCredits {
+			for _, credit := range p.Credits {
+				op.Credits = append(op.Credits, outputXMLCredit{Type: credit.Type, Name: credit.Name})
+			}
+		}
+		if rule.IncludeCategories {
+			for _, category := range p.Categories {
+				op.Categories = append(op.Categories, outputXMLText{Lang: category.Lang, Value: category.Category})
+			}
+		}
+		if rule.IncludeIcon {
+			op.Icon = outputXMLIcon{Src: p.IconURL}
+		}
+		feed.Programmes = append(feed.Programmes, op)
+	}
+	data, err := xml.MarshalIndent(feed, "", "  ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var buf bytes.Buffer
+	buf.WriteString(xml.Header)
+	buf.Write(data)
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Write(buf.Bytes())
+}
+
+type outputXML struct {
+	XMLName    xml.Name             `xml:"tv"`
+	Generator  string               `xml:"generator-info-name,attr"`
+	Channels   []outputXMLChannel   `xml:"channel"`
+	Programmes []outputXMLProgramme `xml:"programme"`
+}
+type outputXMLChannel struct {
+	ID   string `xml:"id,attr"`
+	Name string `xml:"display-name"`
+}
+type outputXMLProgramme struct {
+	Channel     string            `xml:"channel,attr"`
+	Start       string            `xml:"start,attr"`
+	Stop        string            `xml:"stop,attr"`
+	Title       string            `xml:"title,omitempty"`
+	Subtitle    string            `xml:"sub-title,omitempty"`
+	Description string            `xml:"desc,omitempty"`
+	Country     string            `xml:"country,omitempty"`
+	Date        string            `xml:"date,omitempty"`
+	EpisodeNum  string            `xml:"episode-num,omitempty"`
+	Icon        outputXMLIcon     `xml:"icon,omitempty"`
+	Credits     []outputXMLCredit `xml:"credits>credit,omitempty"`
+	Categories  []outputXMLText   `xml:"category,omitempty"`
+}
+
+type outputXMLIcon struct {
+	Src string `xml:"src,attr"`
+}
+
+type outputXMLCredit struct {
+	Type string `xml:"type,attr"`
+	Name string `xml:",chardata"`
+}
+
+type outputXMLText struct {
+	Lang  string `xml:"lang,attr,omitempty"`
+	Value string `xml:",chardata"`
 }
 
 func (h *Handler) AddSource(w http.ResponseWriter, r *http.Request) {

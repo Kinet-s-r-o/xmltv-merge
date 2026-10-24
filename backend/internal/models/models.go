@@ -73,3 +73,31 @@ type Category struct {
 	Lang        string `json:"lang,omitempty"`
 	Category    string `json:"category"`
 }
+
+type OutputChannel struct {
+	ID                 int      `json:"id"`
+	OutputID           int      `json:"output_id"`
+	ChannelID          int      `json:"channel_id"`
+	DisplayName        string   `json:"display_name"`
+	IncludeTitle       bool     `json:"include_title"`
+	IncludeSubtitle    bool     `json:"include_subtitle"`
+	IncludeDescription bool     `json:"include_description"`
+	IncludeCredits     bool     `json:"include_credits"`
+	IncludeCategories  bool     `json:"include_categories"`
+	IncludeCountry     bool     `json:"include_country"`
+	IncludeYear        bool     `json:"include_year"`
+	IncludeEpisodeNum  bool     `json:"include_episode_num"`
+	IncludeIcon        bool     `json:"include_icon"`
+	Channel            *Channel `json:"channel,omitempty"`
+}
+
+type Output struct {
+	ID           int             `json:"id"`
+	Name         string          `json:"name"`
+	Slug         string          `json:"slug"`
+	PublicToken  string          `json:"public_token"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+	ChannelCount int             `json:"channel_count"`
+	Channels     []OutputChannel `json:"channels,omitempty"`
+}

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -121,6 +122,8 @@ func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channel
 		        p.subtitle, p.subtitle_lang, p.description, p.description_lang,
 		        p.country, p.year, p.episode_num, p.episode_num_system, p.icon_url, p.created_at,
 		        COALESCE(title.lang, ''), COALESCE(title.title, '')
+		         , COALESCE((SELECT json_agg(json_build_object('id', pc.id, 'programme_id', pc.programme_id, 'type', pc.type, 'name', pc.name)) FROM programme_credits pc WHERE pc.programme_id = p.id), '[]')
+		         , COALESCE((SELECT json_agg(json_build_object('id', pgc.id, 'programme_id', pgc.programme_id, 'lang', pgc.lang, 'category', pgc.category)) FROM programme_categories pgc WHERE pgc.programme_id = p.id), '[]')
 		 FROM programmes p
 		 LEFT JOIN LATERAL (
 			SELECT lang, title FROM programme_titles WHERE programme_id = p.id ORDER BY lang LIMIT 1
@@ -172,16 +175,18 @@ func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channel
 	var programmes []models.Programme
 	for rows.Next() {
 		var p models.Programme
-		var titleLang, titleText string
+		var titleLang, titleText, creditsJSON, categoriesJSON string
 		if err := rows.Scan(&p.ID, &p.SourceID, &p.ChannelID, &p.StartTime, &p.StopTime,
 			&p.Subtitle, &p.SubtitleLang, &p.Description, &p.DescriptionLang,
 			&p.Country, &p.Year, &p.EpisodeNum, &p.EpisodeNumSys, &p.IconURL, &p.CreatedAt,
-			&titleLang, &titleText); err != nil {
+			&titleLang, &titleText, &creditsJSON, &categoriesJSON); err != nil {
 			return nil, 0, err
 		}
 		if titleText != "" {
 			p.Titles = []models.Title{{ProgrammeID: p.ID, Lang: titleLang, Title: titleText}}
 		}
+		_ = json.Unmarshal([]byte(creditsJSON), &p.Credits)
+		_ = json.Unmarshal([]byte(categoriesJSON), &p.Categories)
 		programmes = append(programmes, p)
 	}
 	return programmes, total, nil

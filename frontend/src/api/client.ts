@@ -107,6 +107,34 @@ export interface Paginated<T> {
   limit: number
 }
 
+export interface OutputChannel {
+  id?: number
+  output_id?: number
+  channel_id: number
+  display_name: string
+  include_title: boolean
+  include_subtitle: boolean
+  include_description: boolean
+  include_credits: boolean
+  include_categories: boolean
+  include_country: boolean
+  include_year: boolean
+  include_episode_num: boolean
+  include_icon: boolean
+  channel?: Channel
+}
+
+export interface Output {
+  id: number
+  name: string
+  slug: string
+  public_token: string
+  created_at: string
+  updated_at: string
+  channel_count: number
+  channels?: OutputChannel[]
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
 
@@ -156,6 +184,12 @@ export const api = {
     const q = qs.toString()
     return request<Channel[]>(`/channels${q ? `?${q}` : ''}`)
   },
+
+  outputs: () => request<Output[]>('/outputs'),
+  output: (id: number) => request<Output>(`/outputs/${id}`),
+  addOutput: (name: string) => request<{ id: number }>('/outputs', { method: 'POST', body: JSON.stringify({ name }) }),
+  updateOutput: (id: number, output: { name: string; channels: OutputChannel[] }) => request<void>(`/outputs/${id}`, { method: 'PUT', body: JSON.stringify(output) }),
+  deleteOutput: (id: number) => request<void>(`/outputs/${id}`, { method: 'DELETE' }),
 
   channel: (id: number) => request<Channel>(`/channels/${id}`),
 

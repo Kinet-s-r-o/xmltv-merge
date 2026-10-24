@@ -15,6 +15,7 @@ type EPGService struct {
 	sourceRepo  *repository.SourceRepository
 	channelRepo *repository.ChannelRepository
 	progRepo    *repository.ProgrammeRepository
+	outputRepo  *repository.OutputRepository
 }
 
 func NewEPGService(db *pgxpool.Pool) *EPGService {
@@ -23,7 +24,30 @@ func NewEPGService(db *pgxpool.Pool) *EPGService {
 		sourceRepo:  repository.NewSourceRepository(db),
 		channelRepo: repository.NewChannelRepository(db),
 		progRepo:    repository.NewProgrammeRepository(db),
+		outputRepo:  repository.NewOutputRepository(db),
 	}
+}
+
+func (s *EPGService) GetOutputs(ctx context.Context) ([]models.Output, error) {
+	return s.outputRepo.List(ctx)
+}
+func (s *EPGService) GetOutput(ctx context.Context, id int) (*models.Output, error) {
+	return s.outputRepo.Get(ctx, id)
+}
+func (s *EPGService) GetOutputBySlugAndToken(ctx context.Context, slug, token string) (*models.Output, error) {
+	return s.outputRepo.GetBySlugAndToken(ctx, slug, token)
+}
+func (s *EPGService) AddOutput(ctx context.Context, name string) (int, error) {
+	return s.outputRepo.Create(ctx, name)
+}
+func (s *EPGService) UpdateOutput(ctx context.Context, id int, name string) (bool, error) {
+	return s.outputRepo.Update(ctx, id, name)
+}
+func (s *EPGService) DeleteOutput(ctx context.Context, id int) (bool, error) {
+	return s.outputRepo.Delete(ctx, id)
+}
+func (s *EPGService) SaveOutputChannels(ctx context.Context, id int, channels []models.OutputChannel) error {
+	return s.outputRepo.SaveChannels(ctx, id, channels)
 }
 
 func (s *EPGService) GetSources(ctx context.Context) ([]models.Source, error) {

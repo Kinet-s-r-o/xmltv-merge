@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Tv, LayoutDashboard, ListVideo, Database, Moon, Sun } from 'lucide-react'
+import { Tv, LayoutDashboard, ListVideo, Database, Moon, Sun, Layers3 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/epg', icon: Tv, label: 'EPG' },
   { to: '/channels', icon: ListVideo, label: 'Channels' },
   { to: '/sources', icon: Database, label: 'Sources' },
+  { to: '/outputs', icon: Layers3, label: 'Outputs' },
 ]
 
 export function Layout() {
