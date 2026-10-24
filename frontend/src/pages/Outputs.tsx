@@ -20,8 +20,10 @@ export function Outputs() {
   const [draftName, setDraftName] = useState('')
   const [draftChannels, setDraftChannels] = useState<OutputChannel[]>([])
   const [error, setError] = useState<string | null>(null)
-  const { data: outputs = [], isLoading } = useQuery({ queryKey: ['outputs'], queryFn: api.outputs })
-  const { data: channels = [] } = useQuery({ queryKey: ['channels'], queryFn: () => api.channels() })
+  const { data: outputData, isLoading } = useQuery({ queryKey: ['outputs'], queryFn: api.outputs })
+  const { data: channelData } = useQuery({ queryKey: ['channels'], queryFn: () => api.channels() })
+  const outputs = outputData ?? []
+  const channels = channelData ?? []
   const selected = outputs.find((output) => output.id === selectedId)
   const publicFeedUrl = selected ? `${window.location.origin}/feeds/${selected.slug}.xml?token=${selected.public_token}` : ''
 

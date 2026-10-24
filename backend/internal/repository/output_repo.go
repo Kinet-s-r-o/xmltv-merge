@@ -35,7 +35,7 @@ func (r *OutputRepository) List(ctx context.Context) ([]models.Output, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var result []models.Output
+	result := make([]models.Output, 0)
 	for rows.Next() {
 		var o models.Output
 		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.PublicToken, &o.CreatedAt, &o.UpdatedAt, &o.ChannelCount); err != nil {
