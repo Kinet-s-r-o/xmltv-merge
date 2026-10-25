@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { api } from '../api/client'
+import { LoadingPanel } from '../components/ui/LoadingPanel'
 
 export function Channels() {
   const [search, setSearch] = useState('')
@@ -53,7 +54,7 @@ export function Channels() {
       {/* Channel List */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl divide-y divide-zinc-800">
         {isLoading ? (
-          <div className="p-6 text-center text-zinc-500">Loading...</div>
+          <LoadingPanel label="Loading channels" compact />
         ) : channels && channels.length > 0 ? (
           channels.map((ch) => (
             <div key={ch.id} className="p-4 flex items-center gap-3">

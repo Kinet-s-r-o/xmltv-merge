@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Tv, LayoutDashboard, ListVideo, Database, Moon, Sun, Layers3 } from 'lucide-react'
+import { Tv, LayoutDashboard, ListVideo, Database, Menu, Moon, Sun, Layers3, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
@@ -18,6 +18,7 @@ const navItems = [
 
 export function Layout() {
   const [lightMode, setLightMode] = useState(() => localStorage.getItem('xmltv-theme') === 'light')
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     document.documentElement.classList.toggle('light', lightMode)
@@ -25,11 +26,18 @@ export function Layout() {
   }, [lightMode])
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <aside className="w-56 border-r border-zinc-800 bg-zinc-900/50 flex flex-col">
+    <div className="flex min-h-screen overflow-hidden">
+      <a href="#main-content" className="sr-only z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
+        Skip to content
+      </a>
+      {mobileNavOpen && <button type="button" className="fixed inset-0 z-30 bg-black/60 md:hidden" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-zinc-800 bg-zinc-900/95 transition-transform duration-200 md:static md:w-56 md:translate-x-0 md:bg-zinc-900/50 ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-14 flex items-center gap-2 px-4 border-b border-zinc-800">
           <Tv className="w-5 h-5 text-indigo-400" />
           <span className="font-semibold text-sm tracking-tight">XMLTV EPG</span>
+          <button type="button" className="ml-auto rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 md:hidden" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation">
+            <X className="h-5 w-5" />
+          </button>
         </div>
         <nav className="flex-1 py-4 space-y-1 px-2">
           {navItems.map(({ to, icon: Icon, label }) => (
@@ -37,6 +45,7 @@ export function Layout() {
               key={to}
               to={to}
               end={to === '/'}
+              onClick={() => setMobileNavOpen(false)}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
@@ -64,7 +73,13 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-auto">
+      <main id="main-content" className="min-w-0 flex-1 overflow-auto">
+        <div className="flex h-14 items-center border-b border-zinc-800 px-4 md:hidden">
+          <button type="button" className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
+            <Menu className="h-5 w-5" />
+          </button>
+          <span className="ml-3 text-sm font-medium text-zinc-200">XMLTV EPG</span>
+        </div>
         <Outlet />
       </main>
     </div>

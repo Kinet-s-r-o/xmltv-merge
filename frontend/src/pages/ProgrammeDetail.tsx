@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ArrowLeft, MapPin, Calendar, Film } from 'lucide-react'
 import { api } from '../api/client'
+import { LoadingPanel } from '../components/ui/LoadingPanel'
 
 export function ProgrammeDetail() {
   const { id } = useParams<{ id: string }>()
@@ -17,7 +18,7 @@ export function ProgrammeDetail() {
   })
 
   if (isLoading) {
-    return <div className="p-6 text-zinc-500">Loading...</div>
+    return <LoadingPanel label="Loading programme" />
   }
 
   if (!programme) {

@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Tv, ListVideo, Database, ArrowRight, Upload } from 'lucide-react'
 import { api } from '../api/client'
+import { LoadingPanel } from '../components/ui/LoadingPanel'
 
 export function Dashboard() {
-  const { data: sources, isLoading } = useQuery({
+  const { data: sources, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
   })
@@ -50,7 +51,12 @@ export function Dashboard() {
           </Link>
         </div>
         {isLoading ? (
-          <div className="p-6 text-center text-zinc-500 text-sm">Loading...</div>
+          <LoadingPanel label="Loading sources" compact />
+        ) : isError ? (
+          <div role="alert" className="flex flex-wrap items-center justify-center gap-3 p-6 text-sm text-red-300">
+            <span>Could not load sources: {(error as Error).message}</span>
+            <button type="button" onClick={() => refetch()} className="min-h-11 rounded-lg bg-zinc-800 px-3 py-2 text-zinc-200 hover:bg-zinc-700">Retry</button>
+          </div>
         ) : sources && sources.length > 0 ? (
           <div className="divide-y divide-zinc-800">
             {sources.map((s) => (

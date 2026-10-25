@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, addDays } from 'date-fns'
 import { Calendar, ChevronLeft, ChevronRight, Film, MapPin, Search, X } from 'lucide-react'
 import { api, Programme } from '../api/client'
+import { LoadingPanel } from '../components/ui/LoadingPanel'
 
 const HOUR_WIDTH = 150
 const STATION_WIDTH = 220
@@ -15,6 +16,9 @@ export function EPGView() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<number | null>(null)
+  const [now, setNow] = useState(() => new Date())
+  const modalCloseRef = useRef<HTMLButtonElement>(null)
+  const lastFocusedElement = useRef<HTMLElement | null>(null)
 
   const { data: sources = [] } = useQuery({
     queryKey: ['sources'],
@@ -53,13 +57,41 @@ export function EPGView() {
   })
 
   useEffect(() => {
-    if (selectedProgrammeId === null) return
+    if (selectedProgrammeId === null) {
+      lastFocusedElement.current?.focus()
+      lastFocusedElement.current = null
+      return
+    }
+    modalCloseRef.current?.focus()
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelectedProgrammeId(null)
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setSelectedProgrammeId(null)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
+      if (!dialog) return
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [selectedProgrammeId])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const programmesByChannel = useMemo(() => {
     const grouped = new Map<number, Programme[]>()
@@ -76,6 +108,9 @@ export function EPGView() {
   dayStart.setHours(0, 0, 0, 0)
   const dayEnd = new Date(dayStart)
   dayEnd.setDate(dayEnd.getDate() + 1)
+  const nowPosition = now >= dayStart && now < dayEnd
+    ? ((now.getTime() - dayStart.getTime()) / 3_600_000) * HOUR_WIDTH
+    : null
 
   const getProgrammePosition = (programme: Programme) => {
     const start = new Date(programme.start_time)
@@ -137,7 +172,7 @@ export function EPGView() {
 
       <div className="flex-1 min-h-0 overflow-auto bg-zinc-900/50 border border-zinc-800 rounded-xl">
         {channelsLoading || programmesLoading ? (
-          <div className="p-8 text-center text-zinc-500">Loading EPG...</div>
+          <LoadingPanel label="Loading EPG" />
         ) : channels.length === 0 ? (
           <div className="p-8 text-center text-zinc-500">No stations match this filter.</div>
         ) : (
@@ -152,6 +187,7 @@ export function EPGView() {
                     {String(hour).padStart(2, '0')}:00
                   </div>
                 ))}
+                {nowPosition !== null && <div className="pointer-events-none absolute inset-y-0 z-10 w-px bg-amber-400" style={{ left: nowPosition }}><span className="absolute left-1 top-1 rounded bg-amber-400 px-1 text-[10px] font-semibold text-zinc-950">Now</span></div>}
               </div>
             </div>
 
@@ -165,6 +201,7 @@ export function EPGView() {
                   {Array.from({ length: HOURS_PER_DAY }, (_, hour) => (
                     <div key={hour} className="absolute inset-y-0 border-l border-zinc-800/50" style={{ left: hour * HOUR_WIDTH }} />
                   ))}
+                  {nowPosition !== null && <div className="pointer-events-none absolute inset-y-0 z-[5] w-px bg-amber-400/70" style={{ left: nowPosition }} />}
                   {(programmesByChannel.get(channel.id) ?? []).map((programme) => {
                     const position = getProgrammePosition(programme)
                     if (position.left >= HOURS_PER_DAY * HOUR_WIDTH || position.left + position.width <= 0) return null
@@ -172,7 +209,10 @@ export function EPGView() {
                       <button
                         key={programme.id}
                         type="button"
-                        onClick={() => setSelectedProgrammeId(programme.id)}
+                        onClick={() => {
+                          lastFocusedElement.current = document.activeElement as HTMLElement
+                          setSelectedProgrammeId(programme.id)
+                        }}
                         className="absolute inset-y-1 overflow-hidden rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-1 hover:bg-indigo-500/20 transition-colors"
                         style={{ left: position.left + 2, width: position.width - 4 }}
                         title={`${programme.titles?.[0]?.title || programme.subtitle || 'Untitled'} · ${format(new Date(programme.start_time), 'HH:mm')}–${format(new Date(programme.stop_time), 'HH:mm')}`}
@@ -196,7 +236,7 @@ export function EPGView() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProgrammeId(null) }}
         >
-          <section role="dialog" aria-modal="true" aria-labelledby="programme-modal-title" className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+          <section role="dialog" aria-modal="true" aria-labelledby="programme-modal-title" aria-describedby="programme-modal-description" aria-busy={programmeLoading} className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-4">
                 {selectedProgramme?.icon_url && <img src={selectedProgramme.icon_url} alt="" className="h-28 w-20 rounded-lg object-cover" />}
@@ -213,8 +253,9 @@ export function EPGView() {
                   )}
                 </div>
               </div>
-              <button type="button" onClick={() => setSelectedProgrammeId(null)} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" aria-label="Close programme details"><X className="h-5 w-5" /></button>
+              <button ref={modalCloseRef} type="button" onClick={() => setSelectedProgrammeId(null)} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" aria-label="Close programme details"><X className="h-5 w-5" /></button>
             </div>
+            <p id="programme-modal-description" className="sr-only">Programme metadata, description and credits</p>
             {selectedProgramme?.categories && selectedProgramme.categories.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {selectedProgramme.categories.map((category) => <span key={category.id} className="rounded-full bg-indigo-500/10 px-2 py-1 text-xs text-indigo-300">{category.category}</span>)}

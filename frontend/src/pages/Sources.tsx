@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2, Pencil, Save, X, Search, Power } from 'lucide-react'
 import { api, CreateSourceInput, Source } from '../api/client'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { LoadingPanel } from '../components/ui/LoadingPanel'
 
 export function Sources() {
   const queryClient = useQueryClient()
@@ -13,6 +15,8 @@ export function Sources() {
   const [success, setSuccess] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [sourceSearch, setSourceSearch] = useState('')
+  const [deleteSourceId, setDeleteSourceId] = useState<number | null>(null)
+  const [deleteSourceName, setDeleteSourceName] = useState('')
 
   const { data: sources, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
@@ -87,10 +91,8 @@ export function Sources() {
   })
 
   const handleDelete = (id: number, sourceName: string) => {
-    if (window.confirm(`Delete source "${sourceName}" and all its channels and programmes? This cannot be undone.`)) {
-      setError(null)
-      deleteMutation.mutate(id)
-    }
+    setDeleteSourceId(id)
+    setDeleteSourceName(sourceName)
   }
 
   const handleEdit = (source: Source) => {
@@ -191,7 +193,7 @@ export function Sources() {
       </form>
 
       {error && (
-        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+        <div role="alert" aria-live="assertive" className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
           <XCircle className="w-5 h-5 text-red-400" />
           <p className="text-sm text-red-300">{error}</p>
         </div>
@@ -212,7 +214,7 @@ export function Sources() {
           </label>
         </div>
         {isLoading ? (
-          <div className="p-6 text-center text-zinc-500">Loading...</div>
+          <LoadingPanel label="Loading sources" compact />
         ) : isError ? (
           <div className="p-6 flex flex-wrap items-center justify-center gap-3 text-sm text-red-400">
             <span>Could not load sources: {(sourcesError as Error).message}</span>
@@ -301,6 +303,20 @@ export function Sources() {
           <div className="p-6 text-center text-zinc-500">{sourceSearch ? 'No sources match this search.' : 'No sources yet.'}</div>
         )}
       </div>
+      <ConfirmDialog
+        open={deleteSourceId !== null}
+        title="Delete source?"
+        description={`Deleting ${deleteSourceName} also removes all of its channels and programmes. This action cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting...' : 'Delete source'}
+        destructive
+        onCancel={() => { if (!deleteMutation.isPending) setDeleteSourceId(null) }}
+        onConfirm={() => {
+          if (deleteSourceId === null) return
+          setError(null)
+          deleteMutation.mutate(deleteSourceId)
+          setDeleteSourceId(null)
+        }}
+      />
     </div>
   )
 }
