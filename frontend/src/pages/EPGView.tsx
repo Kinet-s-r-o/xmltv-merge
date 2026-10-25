@@ -166,11 +166,11 @@ export function EPGView() {
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-2">
-            <button onClick={() => setSelectedDate((date) => addDays(date, -1))} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Previous day">
+            <button type="button" onClick={() => setSelectedDate((date) => addDays(date, -1))} className="min-h-11 min-w-11 rounded-lg p-2 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Previous day">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button onClick={() => setSelectedDate(new Date())} className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Today</button>
-            <button onClick={() => setSelectedDate((date) => addDays(date, 1))} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Next day">
+            <button type="button" onClick={() => setSelectedDate(new Date())} className="min-h-11 rounded-lg px-3 py-1.5 text-xs bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Today</button>
+            <button type="button" onClick={() => setSelectedDate((date) => addDays(date, 1))} className="min-h-11 min-w-11 rounded-lg p-2 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" aria-label="Next day">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -201,8 +201,8 @@ export function EPGView() {
         <span className="text-xs text-zinc-500">{allChannels.length} stations</span>
         <div className="ml-auto flex items-center gap-2 text-xs text-zinc-400">
           <span>{allChannels.length === 0 ? '0' : `${(currentPage - 1) * CHANNELS_PER_PAGE + 1}–${Math.min(currentPage * CHANNELS_PER_PAGE, allChannels.length)} of ${allChannels.length}`}</span>
-          <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="rounded p-1 hover:bg-zinc-800 disabled:opacity-40" aria-label="Previous stations"><ChevronLeft className="h-4 w-4" /></button>
-          <button onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount} className="rounded p-1 hover:bg-zinc-800 disabled:opacity-40" aria-label="Next stations"><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="min-h-11 min-w-11 rounded p-1 hover:bg-zinc-800 disabled:opacity-40" aria-label="Previous stations"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount} className="min-h-11 min-w-11 rounded p-1 hover:bg-zinc-800 disabled:opacity-40" aria-label="Next stations"><ChevronRight className="h-4 w-4" /></button>
         </div>
       </div>
 
@@ -294,7 +294,7 @@ export function EPGView() {
                   )}
                 </div>
               </div>
-              <button ref={modalCloseRef} type="button" onClick={() => setSelectedProgrammeId(null)} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" aria-label="Close programme details"><X className="h-5 w-5" /></button>
+            <button ref={modalCloseRef} type="button" onClick={() => setSelectedProgrammeId(null)} className="min-h-11 min-w-11 rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" aria-label="Close programme details"><X className="h-5 w-5" /></button>
             </div>
             <p id="programme-modal-description" className="sr-only">Programme metadata, description and credits</p>
             {selectedProgramme?.categories && selectedProgramme.categories.length > 0 && (

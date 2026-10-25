@@ -1,6 +1,6 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { Tv, LayoutDashboard, ListVideo, Database, Menu, Moon, Sun, Layers3, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -17,6 +17,8 @@ const navItems = [
 ]
 
 export function Layout() {
+  const location = useLocation()
+  const mainRef = useRef<HTMLElement>(null)
   const [lightMode, setLightMode] = useState(() => localStorage.getItem('xmltv-theme') === 'light')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
@@ -24,6 +26,10 @@ export function Layout() {
     document.documentElement.classList.toggle('light', lightMode)
     localStorage.setItem('xmltv-theme', lightMode ? 'light' : 'dark')
   }, [lightMode])
+
+  useEffect(() => {
+    mainRef.current?.focus()
+  }, [location.pathname])
 
   return (
     <div className="flex min-h-screen overflow-hidden">
@@ -48,7 +54,7 @@ export function Layout() {
               onClick={() => setMobileNavOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                'flex min-h-11 items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                   isActive
                     ? 'bg-indigo-500/10 text-indigo-300'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50',
@@ -67,13 +73,13 @@ export function Layout() {
             onClick={() => setLightMode((enabled) => !enabled)}
             aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
             title={lightMode ? 'Dark mode' : 'Light mode'}
-            className="p-2 rounded-lg hover:bg-zinc-800/70 hover:text-zinc-200 transition-colors"
+            className="min-h-11 min-w-11 rounded-lg p-2 hover:bg-zinc-800/70 hover:text-zinc-200 transition-colors"
           >
             {lightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
           </button>
         </div>
       </aside>
-      <main id="main-content" className="min-w-0 flex-1 overflow-auto">
+      <main ref={mainRef} id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-auto outline-none">
         <div className="flex h-14 items-center border-b border-zinc-800 px-4 md:hidden">
           <button type="button" className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
             <Menu className="h-5 w-5" />
