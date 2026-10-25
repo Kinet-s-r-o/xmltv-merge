@@ -61,7 +61,7 @@ export function EPGView() {
     queryFn: () => api.sources(),
   })
 
-  const { data: channelData, isLoading: channelsLoading } = useQuery({
+  const { data: channelData, isLoading: channelsLoading, isError: channelsError, error: channelsErrorValue, refetch: refetchChannels } = useQuery({
     queryKey: ['channels', selectedSource, search],
     queryFn: () => api.channels({
       source_id: selectedSource ?? undefined,
@@ -75,7 +75,7 @@ export function EPGView() {
   const channels = useMemo(() => allChannels.slice((currentPage - 1) * CHANNELS_PER_PAGE, currentPage * CHANNELS_PER_PAGE), [allChannels, currentPage])
   const channelIds = channels.map((channel) => channel.id)
 
-  const { data: programmes, isLoading: programmesLoading } = useQuery({
+  const { data: programmes, isLoading: programmesLoading, isError: programmesError, error: programmesErrorValue, refetch: refetchProgrammes } = useQuery({
     queryKey: ['programmes', format(selectedDate, 'yyyy-MM-dd'), selectedSource, channelIds],
     queryFn: () => api.programmes({
       date: format(selectedDate, 'yyyy-MM-dd'),
@@ -209,6 +209,11 @@ export function EPGView() {
       <div className="flex-1 min-h-0 overflow-auto bg-zinc-900/50 border border-zinc-800 rounded-xl">
         {channelsLoading || programmesLoading ? (
           <LoadingPanel label="Loading EPG" />
+        ) : channelsError || programmesError ? (
+          <div role="alert" className="flex flex-col items-center gap-3 p-8 text-center text-sm text-red-300">
+            <p>{channelsError ? `Could not load stations: ${(channelsErrorValue as Error).message}` : `Could not load programmes: ${(programmesErrorValue as Error).message}`}</p>
+            <button type="button" onClick={() => { if (channelsError) refetchChannels(); if (programmesError) refetchProgrammes() }} className="min-h-11 rounded-lg bg-zinc-800 px-3 py-2 text-zinc-200 hover:bg-zinc-700">Retry</button>
+          </div>
         ) : channels.length === 0 ? (
           <div className="p-8 text-center text-zinc-500">No stations match this filter.</div>
         ) : (

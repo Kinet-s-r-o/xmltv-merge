@@ -5,6 +5,14 @@ import { api, CreateSourceInput, Source } from '../api/client'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { LoadingPanel } from '../components/ui/LoadingPanel'
 
+type SourceStatusFilter = 'all' | 'healthy' | 'attention' | 'disabled'
+
+function sourceStatus(source: Source): Exclude<SourceStatusFilter, 'all'> {
+  if (!source.enabled) return 'disabled'
+  if (source.last_import_status === 'success') return 'healthy'
+  return 'attention'
+}
+
 export function Sources() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
@@ -15,6 +23,7 @@ export function Sources() {
   const [success, setSuccess] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [sourceSearch, setSourceSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<SourceStatusFilter>('all')
   const [deleteSourceId, setDeleteSourceId] = useState<number | null>(null)
   const [deleteSourceName, setDeleteSourceName] = useState('')
 
@@ -87,7 +96,8 @@ export function Sources() {
 
   const filteredSources = (sources ?? []).filter((source) => {
     const query = sourceSearch.trim().toLocaleLowerCase()
-    return !query || source.name.toLocaleLowerCase().includes(query) || source.source_url.toLocaleLowerCase().includes(query)
+    const matchesSearch = !query || source.name.toLocaleLowerCase().includes(query) || source.source_url.toLocaleLowerCase().includes(query)
+    return matchesSearch && (statusFilter === 'all' || sourceStatus(source) === statusFilter)
   })
 
   const handleDelete = (id: number, sourceName: string) => {
@@ -188,7 +198,7 @@ export function Sources() {
               <X className="w-4 h-4" /> Cancel
             </button>
           )}
-          {success && <span className="text-xs text-emerald-400 lg:col-span-full">Source added; first download is scheduled.</span>}
+          {success && <span role="status" aria-live="polite" className="text-xs text-emerald-400 lg:col-span-full">Source added; first download is scheduled.</span>}
         </div>
       </form>
 
@@ -212,11 +222,17 @@ export function Sources() {
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:outline-none"
             />
           </label>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SourceStatusFilter)} aria-label="Filter sources by status" className="min-h-11 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 focus:border-indigo-500/50 focus:outline-none">
+            <option value="all">All statuses</option>
+            <option value="healthy">Healthy</option>
+            <option value="attention">Needs attention</option>
+            <option value="disabled">Disabled</option>
+          </select>
         </div>
         {isLoading ? (
           <LoadingPanel label="Loading sources" compact />
         ) : isError ? (
-          <div className="p-6 flex flex-wrap items-center justify-center gap-3 text-sm text-red-400">
+          <div role="alert" className="p-6 flex flex-wrap items-center justify-center gap-3 text-sm text-red-400">
             <span>Could not load sources: {(sourcesError as Error).message}</span>
             <button onClick={() => refetch()} className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200">
               Retry
@@ -236,6 +252,9 @@ export function Sources() {
                   <p className="text-xs text-zinc-500 mt-1">
                     {source.channel_count ?? 0} channels · {source.programme_count ?? 0} programmes · every {source.refresh_interval_minutes / 60}h · keep {source.history_days} days
                   </p>
+                  <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${sourceStatus(source) === 'healthy' ? 'bg-emerald-500/10 text-emerald-400' : sourceStatus(source) === 'disabled' ? 'bg-zinc-700/60 text-zinc-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                    {sourceStatus(source) === 'healthy' ? 'Healthy' : sourceStatus(source) === 'disabled' ? 'Disabled' : 'Needs attention'}
+                  </span>
                 </div>
                 <div className="ml-auto flex w-full max-w-[440px] items-center gap-4">
                   <button
@@ -300,7 +319,7 @@ export function Sources() {
             ))}
           </div>
         ) : (
-          <div className="p-6 text-center text-zinc-500">{sourceSearch ? 'No sources match this search.' : 'No sources yet.'}</div>
+          <div className="p-8 text-center text-sm text-zinc-500">{sourceSearch || statusFilter !== 'all' ? 'No sources match the current filters.' : 'No sources yet. Add one above to start importing XMLTV data.'}</div>
         )}
       </div>
       <ConfirmDialog

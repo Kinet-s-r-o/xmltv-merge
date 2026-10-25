@@ -19,7 +19,7 @@ export function Channels() {
     queryFn: () => api.sources(),
   })
 
-  const { data: channels, isLoading } = useQuery({
+  const { data: channels, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['channels', sourceFilter, search],
     queryFn: () => api.channels({ source_id: sourceFilter, search: search || undefined }),
   })
@@ -34,21 +34,21 @@ export function Channels() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap gap-3">
+        <div className="relative min-w-0 flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             type="text"
             placeholder="Search channels..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
+            className="min-h-11 w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
           />
         </div>
         <select
           value={sourceFilter ?? ''}
           onChange={(e) => setSourceFilter(e.target.value ? Number(e.target.value) : undefined)}
-          className="px-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 focus:outline-none focus:border-indigo-500/50"
+          className="min-h-11 max-w-full px-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 focus:outline-none focus:border-indigo-500/50"
         >
           <option value="">All Sources</option>
           {sources?.map((s) => (
@@ -61,6 +61,11 @@ export function Channels() {
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl divide-y divide-zinc-800">
         {isLoading ? (
           <LoadingPanel label="Loading channels" compact />
+        ) : isError ? (
+          <div role="alert" className="flex flex-wrap items-center justify-center gap-3 p-6 text-sm text-red-300">
+            <span>Could not load channels: {(error as Error).message}</span>
+            <button type="button" onClick={() => refetch()} className="min-h-11 rounded-lg bg-zinc-800 px-3 py-2 text-zinc-200 hover:bg-zinc-700">Retry</button>
+          </div>
         ) : channels && channels.length > 0 ? (
           channels.map((ch) => (
             <div key={ch.id} className="p-4 flex items-center gap-3">
