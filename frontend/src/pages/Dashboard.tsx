@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Tv, ListVideo, Database, ArrowRight, Upload } from 'lucide-react'
+import { Tv, ListVideo, Database, ArrowRight, Upload, CheckCircle } from 'lucide-react'
 import { api } from '../api/client'
 import { LoadingPanel } from '../components/ui/LoadingPanel'
 
@@ -12,6 +12,9 @@ export function Dashboard() {
 
   const totalChannels = sources?.reduce((sum, s) => sum + (s.channel_count ?? 0), 0) ?? 0
   const totalProgrammes = sources?.reduce((sum, s) => sum + (s.programme_count ?? 0), 0) ?? 0
+  const healthySources = sources?.filter((source) => source.enabled && source.last_import_status === 'success').length ?? 0
+  const attentionSources = sources?.filter((source) => source.enabled && source.last_import_status !== 'success').length ?? 0
+  const disabledSources = sources?.filter((source) => !source.enabled).length ?? 0
 
   return (
     <div className="p-6 space-y-6">
@@ -21,12 +24,18 @@ export function Dashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          icon={Database}
+          icon={CheckCircle}
           label="Sources"
           value={sources?.length ?? 0}
           color="text-indigo-400"
+        />
+        <StatCard
+          icon={Database}
+          label="Healthy sources"
+          value={healthySources}
+          color="text-emerald-400"
         />
         <StatCard
           icon={ListVideo}
@@ -41,6 +50,16 @@ export function Dashboard() {
           color="text-amber-400"
         />
       </div>
+
+      {sources && sources.length > 0 && (
+        <div role="status" aria-atomic="true" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-xs text-zinc-400">
+          <span className="font-medium text-zinc-300">Feed health</span>
+          <span className="text-emerald-400">{healthySources} healthy</span>
+          <span className="text-amber-400">{attentionSources} need attention</span>
+          <span className="text-zinc-500">{disabledSources} disabled</span>
+          {attentionSources > 0 && <Link to="/sources" className="ml-auto min-h-11 inline-flex items-center text-indigo-300 hover:text-indigo-200">Review sources <ArrowRight className="ml-1 h-3 w-3" /></Link>}
+        </div>
+      )}
 
       {/* Sources Table */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl">
@@ -60,9 +79,9 @@ export function Dashboard() {
         ) : sources && sources.length > 0 ? (
           <div className="divide-y divide-zinc-800">
             {sources.map((s) => (
-              <div key={s.id} className="p-4 flex items-center justify-between">
+              <div key={s.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className={`h-2 w-2 rounded-full ${s.enabled && s.last_import_status === 'success' ? 'bg-emerald-400' : s.enabled ? 'bg-amber-400' : 'bg-zinc-500'}`} aria-hidden="true" />
+                  <div className={`h-2 w-2 shrink-0 rounded-full ${s.enabled && s.last_import_status === 'success' ? 'bg-emerald-400' : s.enabled ? 'bg-amber-400' : 'bg-zinc-500'}`} aria-hidden="true" />
                   <div>
                     <p className="text-sm font-medium text-zinc-200">{s.name}</p>
                     <p className="text-xs text-zinc-500">
@@ -70,8 +89,8 @@ export function Dashboard() {
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className={`text-xs ${s.enabled && s.last_import_status === 'success' ? 'text-emerald-400' : s.enabled ? 'text-amber-400' : 'text-zinc-500'}`}>
+                <div className="ml-auto min-w-[150px] text-right">
+                  <p className={`text-xs font-medium ${s.enabled && s.last_import_status === 'success' ? 'text-emerald-400' : s.enabled ? 'text-amber-400' : 'text-zinc-500'}`}>
                     {!s.enabled ? 'Disabled' : s.last_import_status === 'success' ? 'Healthy' : s.last_import_status === 'error' ? 'Error' : 'Pending'}
                   </p>
                   <p className="text-xs text-zinc-400">
