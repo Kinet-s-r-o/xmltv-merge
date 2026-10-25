@@ -62,7 +62,7 @@ export function Dashboard() {
             {sources.map((s) => (
               <div key={s.id} className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <div className={`h-2 w-2 rounded-full ${s.enabled && s.last_import_status === 'success' ? 'bg-emerald-400' : s.enabled ? 'bg-amber-400' : 'bg-zinc-500'}`} aria-hidden="true" />
                   <div>
                     <p className="text-sm font-medium text-zinc-200">{s.name}</p>
                     <p className="text-xs text-zinc-500">
@@ -71,6 +71,9 @@ export function Dashboard() {
                   </div>
                 </div>
                 <div className="text-right">
+                  <p className={`text-xs ${s.enabled && s.last_import_status === 'success' ? 'text-emerald-400' : s.enabled ? 'text-amber-400' : 'text-zinc-500'}`}>
+                    {!s.enabled ? 'Disabled' : s.last_import_status === 'success' ? 'Healthy' : s.last_import_status === 'error' ? 'Error' : 'Pending'}
+                  </p>
                   <p className="text-xs text-zinc-400">
                     {s.last_import_at ? new Date(s.last_import_at).toLocaleString() : 'Never imported'}
                   </p>

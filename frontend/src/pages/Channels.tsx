@@ -1,12 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { api } from '../api/client'
 import { LoadingPanel } from '../components/ui/LoadingPanel'
 
 export function Channels() {
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<number | undefined>()
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
 
   const { data: sources } = useQuery({
     queryKey: ['sources'],
@@ -34,8 +40,8 @@ export function Channels() {
           <input
             type="text"
             placeholder="Search channels..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
           />
         </div>

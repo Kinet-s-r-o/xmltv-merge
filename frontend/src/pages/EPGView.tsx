@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { format, addDays } from 'date-fns'
+import { format, addDays, isValid, parseISO } from 'date-fns'
+import { useSearchParams } from 'react-router-dom'
 import { Calendar, ChevronLeft, ChevronRight, Film, MapPin, Search, X } from 'lucide-react'
 import { api, Programme } from '../api/client'
 import { LoadingPanel } from '../components/ui/LoadingPanel'
@@ -11,14 +12,49 @@ const HOURS_PER_DAY = 24
 const CHANNELS_PER_PAGE = 40
 
 export function EPGView() {
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [selectedSource, setSelectedSource] = useState<number | null>(null)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialDate = parseISO(searchParams.get('date') ?? '')
+  const [selectedDate, setSelectedDate] = useState(isValid(initialDate) ? initialDate : new Date())
+  const [selectedSource, setSelectedSource] = useState<number | null>(() => {
+    const value = Number(searchParams.get('source'))
+    return Number.isInteger(value) && value > 0 ? value : null
+  })
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '')
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1))
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<number | null>(null)
   const [now, setNow] = useState(() => new Date())
   const modalCloseRef = useRef<HTMLButtonElement>(null)
   const lastFocusedElement = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+
+  useEffect(() => {
+    const urlDate = parseISO(searchParams.get('date') ?? '')
+    if (isValid(urlDate)) {
+      setSelectedDate((current) => format(current, 'yyyy-MM-dd') === format(urlDate, 'yyyy-MM-dd') ? current : urlDate)
+    }
+    const sourceValue = Number(searchParams.get('source'))
+    const urlSource = Number.isInteger(sourceValue) && sourceValue > 0 ? sourceValue : null
+    setSelectedSource((current) => current === urlSource ? current : urlSource)
+    const urlSearch = searchParams.get('q') ?? ''
+    setSearchInput((current) => current === urlSearch ? current : urlSearch)
+    setSearch((current) => current === urlSearch ? current : urlSearch)
+    const urlPage = Math.max(1, Number(searchParams.get('page')) || 1)
+    setPage((current) => current === urlPage ? current : urlPage)
+  }, [searchParams])
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    params.set('date', format(selectedDate, 'yyyy-MM-dd'))
+    if (selectedSource !== null) params.set('source', String(selectedSource))
+    if (search) params.set('q', search)
+    if (page > 1) params.set('page', String(page))
+    setSearchParams(params, { replace: true })
+  }, [page, search, selectedDate, selectedSource, setSearchParams])
 
   const { data: sources = [] } = useQuery({
     queryKey: ['sources'],
@@ -157,7 +193,7 @@ export function EPGView() {
           <input
             type="search"
             value={search}
-            onChange={(event) => { setSearch(event.target.value); setPage(1) }}
+            onChange={(event) => { setSearchInput(event.target.value); setPage(1) }}
             placeholder="Search stations..."
             className="w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
           />
