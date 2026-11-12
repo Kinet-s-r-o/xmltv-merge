@@ -3,6 +3,7 @@
 | Folder or file | What lives there | Read before changing |
 | --- | --- | --- |
 | `cmd/server/main.go` | Application startup, dependency wiring, scheduler start, middleware, routes and graceful shutdown. | `internal/config`, `internal/database`, `internal/handler`, `internal/service`. |
+| `postgres.Dockerfile` | PostgreSQL 17 image with Alpine security updates and su-exec privilege switching. | Root `docker-compose.yml` and `../docs/map/OPERATIONS.md`; preserve the database major version. |
 | `internal/config/` | Environment-backed runtime configuration. | `config.go`; keep secret values out of docs. |
 | `internal/database/` | PostgreSQL pool setup and embedded ordered migrations. | `db.go` and the full migration sequence. |
 | `internal/database/migrations/` | Schema for sources, channels, programmes, retention, activation, outputs and feed tokens. | Add a new numbered migration; do not rewrite applied migrations. |

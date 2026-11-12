@@ -16,6 +16,7 @@
 | `../design-system/xmltv-epg/MASTER.md` | Project-wide visual source of truth. | Read before UI changes; page overrides are under its `pages/` directory. |
 | `vite.config.ts` | Vite/Tailwind plugins and local `/api` proxy. | Local development routing. |
 | `nginx.conf` | Production SPA fallback, backend API/feed proxy and static caching. | Container/runtime routing. |
+| `Dockerfile`, `.dockerignore` | Locked npm install and patched Nginx image; exclude host dependencies and build output. | Root `docker-compose.yml` and `../docs/map/OPERATIONS.md`. |
 
 ## Checks
 
