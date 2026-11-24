@@ -9,12 +9,35 @@ import { useFeedback } from '../components/ui/Feedback'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
-import { formatInterval, formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
+import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+import { HEALTH_OPTIONS, formatInterval, formatTimestamp, healthBadge, healthLabel, sourceHealth, sourceSearchText } from '../lib/sourceStatus'
 import { useConfigTransfer } from '../lib/configTransfer'
 import { useTableSelection } from '../lib/tableSelection'
 import { useAuth } from '../lib/auth'
 
-type SourceStatusFilter = 'all' | 'healthy' | 'attention' | 'disabled'
+const SOURCE_COLUMNS: TableColumn<Source>[] = [
+  { id: 'name', label: 'Source', kind: 'text', value: (source) => source.name },
+  {
+    id: 'status',
+    label: 'Status',
+    kind: 'enum',
+    value: (source) => sourceHealth(source),
+    options: HEALTH_OPTIONS,
+  },
+  { id: 'last_import', label: 'Last import', kind: 'date', value: (source) => source.last_import_at },
+  { id: 'channels', label: 'Channels', kind: 'number', align: 'right', value: (source) => source.channel_count ?? 0 },
+  { id: 'programmes', label: 'Programmes', kind: 'number', align: 'right', value: (source) => source.programme_count ?? 0 },
+  { id: 'schedule', label: 'Schedule', kind: 'number', filterHint: 'refresh interval in minutes', value: (source) => source.refresh_interval_minutes },
+  {
+    id: 'refresh',
+    label: 'Refresh',
+    kind: 'enum',
+    value: (source) => (source.enabled ? 'enabled' : 'disabled'),
+    options: [{ value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }],
+  },
+]
+
+
 
 interface BulkRun {
   kind: 'delete' | 'refresh'
@@ -48,12 +71,6 @@ function sameForm(a: SourceFormValues, b: SourceFormValues) {
   return a.name === b.name && a.url === b.url && a.intervalHours === b.intervalHours && a.historyDays === b.historyDays
 }
 
-function matchesStatus(source: Source, filter: SourceStatusFilter) {
-  const health = sourceHealth(source)
-  if (filter === 'all') return true
-  if (filter === 'attention') return health === 'failed' || health === 'pending'
-  return health === filter
-}
 
 export function Sources() {
   const { can } = useAuth()
@@ -68,8 +85,6 @@ export function Sources() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [discardOpen, setDiscardOpen] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
-  const [sourceSearch, setSourceSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<SourceStatusFilter>('all')
   const [deleteTarget, setDeleteTarget] = useState<Source | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkRun, setBulkRun] = useState<BulkRun | null>(null)
@@ -187,13 +202,10 @@ export function Sources() {
     },
   })
 
-  const query = sourceSearch.trim().toLocaleLowerCase()
-  const filteredSources = sources.filter((source) => {
-    const matchesSearch = !query || source.name.toLocaleLowerCase().includes(query) || source.source_url.toLocaleLowerCase().includes(query)
-    return matchesSearch && matchesStatus(source, statusFilter)
-  })
+  const table = useTableControls(sources, SOURCE_COLUMNS, { searchText: sourceSearchText })
+  const filteredSources = table.rows
 
-  const { visible: visibleSources, paginationProps } = usePagedRows(filteredSources, 'xmltv-sources-page-size', `${query}|${statusFilter}`)
+  const { visible: visibleSources, paginationProps } = usePagedRows(filteredSources, 'xmltv-sources-page-size', table.resetKey)
   const selection = useTableSelection(filteredSources, visibleSources, sourceId)
   const selectedSources = selection.selectedRows
   const selectedRefreshable = selectedSources.filter((source) => source.enabled && source.source_url)
@@ -467,29 +479,11 @@ export function Sources() {
             <h2 id="sources-table-title">Configured sources</h2>
             <p className="font-mono">{filteredSources.length} of {sources.length} shown · status refreshes every 30 s</p>
           </div>
-          <div className="toolbar-filters">
-            <label className="search-field w-full sm:w-64">
-              <span className="sr-only">Search sources by name or URL</span>
-              <Search className="h-3.5 w-3.5" aria-hidden="true" />
-              <input
-                type="search"
-                className="input"
-                value={sourceSearch}
-                onChange={(event) => setSourceSearch(event.target.value)}
-                placeholder="Search name or URL"
-              />
-            </label>
-            <label className="w-full sm:w-48">
-              <span className="sr-only">Filter sources by status</span>
-              <select className="input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SourceStatusFilter)}>
-                <option value="all">All statuses</option>
-                <option value="healthy">Imported</option>
-                <option value="attention">Failed or awaiting import</option>
-                <option value="disabled">Disabled</option>
-              </select>
-            </label>
-          </div>
+          {sources.length > 0 && (
+            <TableSearch controls={table} label="Search sources by name, URL, status or import error" placeholder="Search name, URL, status or error" />
+          )}
         </div>
+        {sources.length > 0 && <TableFilterSummary controls={table} />}
 
         {(selection.count > 0 || bulkRun) && (
           <div className="bulk-bar" role="region" aria-label="Bulk actions for selected sources">
@@ -567,8 +561,8 @@ export function Sources() {
             )}
           </EmptyState>
         ) : filteredSources.length === 0 ? (
-          <EmptyState icon={Search} title="No sources match the current filters" message="Clear the search or choose All statuses.">
-            <button type="button" className="btn btn-secondary" onClick={() => { setSourceSearch(''); setStatusFilter('all') }}>Clear filters</button>
+          <EmptyState icon={Search} title="No sources match the current filters" message="Change the search or column filters, or clear them to list all sources.">
+            <button type="button" className="btn btn-secondary" onClick={table.clearAll}>Clear filters</button>
           </EmptyState>
         ) : (
           <div className="table-scroll" onKeyDown={bulkBusy ? undefined : selection.tableKeyDown(() => { if (canDelete) setBulkDeleteOpen(true) })}>
@@ -589,13 +583,7 @@ export function Sources() {
                       aria-keyshortcuts="Control+A Meta+A"
                     />
                   </th>
-                  <th scope="col">Source</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Last import</th>
-                  <th scope="col" className="text-right">Channels</th>
-                  <th scope="col" className="text-right">Programmes</th>
-                  <th scope="col">Schedule</th>
-                  <th scope="col">Refresh</th>
+                  {SOURCE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
                   <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>

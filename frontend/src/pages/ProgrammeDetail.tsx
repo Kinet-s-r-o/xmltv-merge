@@ -2,10 +2,24 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ArrowLeft, SearchX, Tv } from 'lucide-react'
-import { api } from '../api/client'
+import { api, type Credit, type Title } from '../api/client'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
+import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+
+const CREDIT_COLUMNS: TableColumn<Credit>[] = [
+  { id: 'role', label: 'Role', kind: 'text', value: (credit) => credit.type },
+  { id: 'name', label: 'Name', kind: 'text', value: (credit) => credit.name },
+]
+const TITLE_COLUMNS: TableColumn<Title>[] = [
+  { id: 'lang', label: 'Language', kind: 'text', value: (title) => title.lang },
+  { id: 'title', label: 'Title', kind: 'text', value: (title) => title.title },
+]
+const EMPTY_CREDITS: Credit[] = []
+const EMPTY_TITLES: Title[] = []
+const creditSearchText = (credit: Credit) => `${credit.type} ${credit.name}`
+const titleSearchText = (title: Title) => `${title.lang ?? ''} ${title.title}`
 
 export function ProgrammeDetail() {
   const { id } = useParams<{ id: string }>()
@@ -20,8 +34,10 @@ export function ProgrammeDetail() {
     queryFn: () => api.programme(programmeId),
     enabled: validProgrammeId,
   })
-  const credits = usePagedRows(programme?.credits ?? [], 'xmltv-programme-credits-page-size', programmeId)
-  const titles = usePagedRows(programme?.titles ?? [], 'xmltv-programme-titles-page-size', programmeId)
+  const creditTable = useTableControls(programme?.credits ?? EMPTY_CREDITS, CREDIT_COLUMNS, { searchText: creditSearchText })
+  const titleTable = useTableControls(programme?.titles ?? EMPTY_TITLES, TITLE_COLUMNS, { searchText: titleSearchText })
+  const credits = usePagedRows(creditTable.rows, 'xmltv-programme-credits-page-size', `${programmeId}|${creditTable.resetKey}`)
+  const titles = usePagedRows(titleTable.rows, 'xmltv-programme-titles-page-size', `${programmeId}|${titleTable.resetKey}`)
 
   const backButton = (
     <button type="button" onClick={() => navigate(backTo)} className="btn btn-secondary">
@@ -120,13 +136,18 @@ export function ProgrammeDetail() {
           <div className="table-panel-toolbar">
             <div>
               <h2 id="programme-credits-title">Credits</h2>
-              <p className="font-mono">{programme.credits.length} entries</p>
+              <p className="font-mono">{creditTable.isFiltered ? `${creditTable.rows.length} of ${programme.credits.length}` : programme.credits.length} entries</p>
             </div>
+            <TableSearch controls={creditTable} label="Search credits by role or name" placeholder="Search role or name" />
           </div>
+          <TableFilterSummary controls={creditTable} />
           <div className="table-scroll">
             <table className="data-table">
-              <thead><tr><th scope="col">Role</th><th scope="col">Name</th></tr></thead>
+              <thead><tr>{CREDIT_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={creditTable} />)}</tr></thead>
               <tbody>
+                {credits.visible.length === 0 && (
+                  <tr><td colSpan={2}><span className="table-text text-muted">No credit matches the current filters. </span><button type="button" className="btn-link" onClick={creditTable.clearAll}>Clear filters</button></td></tr>
+                )}
                 {credits.visible.map((credit) => (
                   <tr key={credit.id}>
                     <td><span className="table-text capitalize">{credit.type}</span></td>
@@ -145,12 +166,17 @@ export function ProgrammeDetail() {
           <div className="table-panel-toolbar">
             <div>
               <h2 id="programme-titles-title">Titles by language</h2>
-              <p className="font-mono">{programme.titles.length} variants</p>
+              <p className="font-mono">{titleTable.isFiltered ? `${titleTable.rows.length} of ${programme.titles.length}` : programme.titles.length} variants</p>
             </div>
+            <TableSearch controls={titleTable} label="Search titles by language or text" placeholder="Search language or title" />
           </div>
+          <TableFilterSummary controls={titleTable} />
           <table className="data-table">
-            <thead><tr><th scope="col">Language</th><th scope="col">Title</th></tr></thead>
+            <thead><tr>{TITLE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={titleTable} />)}</tr></thead>
             <tbody>
+              {titles.visible.length === 0 && (
+                <tr><td colSpan={2}><span className="table-text text-muted">No title matches the current filters. </span><button type="button" className="btn-link" onClick={titleTable.clearAll}>Clear filters</button></td></tr>
+              )}
               {titles.visible.map((title) => (
                 <tr key={title.id}>
                   <td><span className="table-text font-mono">{title.lang || '—'}</span></td>

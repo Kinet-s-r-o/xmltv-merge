@@ -1,11 +1,26 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Database, Upload } from 'lucide-react'
-import { api } from '../api/client'
-import { PageHeader } from '../components/ui/PageHeader'
+import { Database, Search, Upload } from 'lucide-react'
+import { api, type Source } from '../api/client'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
-import { formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
+import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+import { HEALTH_OPTIONS, formatTimestamp, healthBadge, healthLabel, sourceHealth, sourceSearchText } from '../lib/sourceStatus'
+
+const SOURCE_COLUMNS: TableColumn<Source>[] = [
+  { id: 'name', label: 'Source', kind: 'text', value: (source) => source.name },
+  {
+    id: 'status',
+    label: 'Status',
+    kind: 'enum',
+    value: (source) => sourceHealth(source),
+    options: HEALTH_OPTIONS,
+  },
+  { id: 'channels', label: 'Channels', kind: 'number', align: 'right', value: (source) => source.channel_count ?? 0 },
+  { id: 'programmes', label: 'Programmes', kind: 'number', align: 'right', value: (source) => source.programme_count ?? 0 },
+  { id: 'last_import', label: 'Last import', kind: 'date', value: (source) => source.last_import_at },
+]
+
 
 export function Dashboard() {
   const { data, isLoading, isError, error, refetch, dataUpdatedAt } = useQuery({
@@ -13,7 +28,8 @@ export function Dashboard() {
     queryFn: () => api.sources(),
   })
   const sources = data ?? []
-  const { visible: visibleSources, paginationProps } = usePagedRows(sources, 'xmltv-dashboard-sources-page-size')
+  const table = useTableControls(sources, SOURCE_COLUMNS, { searchText: sourceSearchText })
+  const { visible: visibleSources, paginationProps } = usePagedRows(table.rows, 'xmltv-dashboard-sources-page-size', table.resetKey)
 
   const totalChannels = sources.reduce((sum, s) => sum + (s.channel_count ?? 0), 0)
   const totalProgrammes = sources.reduce((sum, s) => sum + (s.programme_count ?? 0), 0)
@@ -30,10 +46,7 @@ export function Dashboard() {
 
   return (
     <>
-      <PageHeader
-        title="Feed health"
-        description="Import state, freshness and guide coverage of every XMLTV source. Sources that failed or never imported need action on the Sources page."
-      />
+      <h1 className="sr-only">Dashboard</h1>
 
       {!isLoading && !isError && (
         <dl className="ops-register" aria-label="Source and guide totals">
@@ -76,8 +89,11 @@ export function Dashboard() {
             <h2 id="dashboard-sources-title">Source import status</h2>
             <p>Last import result and stored guide data per source</p>
           </div>
-          <Link to="/sources" className="btn btn-secondary btn-xs">Manage <ArrowRight className="h-3 w-3" aria-hidden="true" /></Link>
+          {sources.length > 0 && (
+            <TableSearch controls={table} label="Search sources by name, URL, status or import error" placeholder="Search name, URL, status or error" />
+          )}
         </div>
+        {sources.length > 0 && <TableFilterSummary controls={table} />}
         {isLoading ? (
           <LoadingState title="Loading source status" compact />
         ) : isError ? (
@@ -90,16 +106,16 @@ export function Dashboard() {
           >
             <Link to="/sources" className="btn btn-primary"><Database className="h-3.5 w-3.5" aria-hidden="true" /> Add a source</Link>
           </EmptyState>
+        ) : table.rows.length === 0 ? (
+          <EmptyState icon={Search} title="No sources match the current filters" message="Change the search or column filters, or clear them to list all sources.">
+            <button type="button" className="btn btn-secondary" onClick={table.clearAll}>Clear filters</button>
+          </EmptyState>
         ) : (
           <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Source</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className="text-right">Channels</th>
-                  <th scope="col" className="text-right">Programmes</th>
-                  <th scope="col">Last import</th>
+                  {SOURCE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
                 </tr>
               </thead>
               <tbody>
@@ -122,7 +138,7 @@ export function Dashboard() {
             </table>
           </div>
         )}
-        {!isLoading && !isError && sources.length > 0 && <Pagination {...paginationProps} itemLabel="sources" />}
+        {!isLoading && !isError && table.rows.length > 0 && <Pagination {...paginationProps} itemLabel="sources" />}
       </section>
     </>
   )

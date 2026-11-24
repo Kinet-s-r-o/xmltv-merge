@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Lock, Pencil, Plus, Save, ShieldCheck, ShieldPlus, Trash2 } from 'lucide-react'
+import { Lock, Pencil, Plus, Save, Search, ShieldCheck, ShieldPlus, Trash2 } from 'lucide-react'
 import { systemApi, type Permission, type PermissionAction, type Permissions, type Role, type RoleInput, type Section } from '../../api/client'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Dialog } from '../../components/ui/Dialog'
@@ -8,6 +8,7 @@ import { useFeedback } from '../../components/ui/Feedback'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../../components/ui/ResourceState'
+import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
 import { PERMISSION_ACTIONS, SECTIONS, useAuth } from '../../lib/auth'
 
 const NONE: Permission = { full: false, read: false, edit: false, delete: false, import: false, export: false }
@@ -53,6 +54,14 @@ function summary(permissions: Permissions) {
   return { full, partial, none: SECTIONS.length - full - partial }
 }
 
+const ROLE_COLUMNS: TableColumn<Role>[] = [
+  { id: 'name', label: 'Role', kind: 'text', value: (role) => role.name },
+  { id: 'access', label: 'Access', kind: 'number', filterHint: 'sections with full access', value: (role) => summary(role.permissions).full },
+  { id: 'users', label: 'Users', kind: 'number', align: 'right', value: (role) => role.user_count },
+]
+
+const roleSearchText = (role: Role) => [role.name, role.description ?? '', role.builtin ? 'Built-in' : ''].join(' ')
+
 export function Roles() {
   const queryClient = useQueryClient()
   const { notify } = useFeedback()
@@ -73,7 +82,8 @@ export function Roles() {
   const editingRole = roles.find((role) => role.id === editingId)
   const readOnlyMatrix = editingRole?.builtin === true || !canEdit
   const formDirty = formOpen && !sameForm(form, initialForm)
-  const { visible, paginationProps } = usePagedRows(roles, 'xmltv-roles-page-size')
+  const table = useTableControls(roles, ROLE_COLUMNS, { searchText: roleSearchText })
+  const { visible, paginationProps } = usePagedRows(table.rows, 'xmltv-roles-page-size', table.resetKey)
 
   const resetForm = () => {
     setFormOpen(false)
@@ -270,23 +280,27 @@ export function Roles() {
         <div className="table-panel-toolbar">
           <div>
             <h2 id="roles-table-title">Roles</h2>
-            <p className="font-mono">{roles.length} roles · {SECTIONS.length} sections</p>
+            <p className="font-mono">{table.isFiltered ? `${table.rows.length} of ${roles.length}` : roles.length} roles · {SECTIONS.length} sections</p>
           </div>
+          {roles.length > 0 && <TableSearch controls={table} label="Search roles by name or description" placeholder="Search name or description" />}
         </div>
+        {roles.length > 0 && <TableFilterSummary controls={table} />}
         {rolesQuery.isLoading ? (
           <LoadingState title="Loading roles" compact />
         ) : rolesQuery.isError ? (
           <ResourceError title="Roles could not be loaded" message={errorMessage(rolesQuery.error)} onRetry={() => rolesQuery.refetch()} />
         ) : roles.length === 0 ? (
           <EmptyState icon={ShieldCheck} title="No roles defined" message="Add a role and choose its permissions per section." />
+        ) : table.rows.length === 0 ? (
+          <EmptyState icon={Search} title="No roles match the current filters" message="Change the search or column filters, or clear them to list all roles.">
+            <button type="button" className="btn btn-secondary" onClick={table.clearAll}>Clear filters</button>
+          </EmptyState>
         ) : (
           <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Role</th>
-                  <th scope="col">Access</th>
-                  <th scope="col" className="text-right">Users</th>
+                  {ROLE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
                   <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>
@@ -334,7 +348,7 @@ export function Roles() {
             </table>
           </div>
         )}
-        {!rolesQuery.isLoading && !rolesQuery.isError && roles.length > 0 && <Pagination {...paginationProps} itemLabel="roles" />}
+        {!rolesQuery.isLoading && !rolesQuery.isError && table.rows.length > 0 && <Pagination {...paginationProps} itemLabel="roles" />}
       </section>
 
       <ConfirmDialog

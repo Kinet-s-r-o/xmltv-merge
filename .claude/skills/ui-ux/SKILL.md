@@ -49,6 +49,7 @@ Authoritative design reference for internal Kinet applications. It preserves the
 | Machine-readable tokens | `assets/tokens.json` |
 | Copy-paste CSS foundations (tokens + all component classes) | `examples/base.css` |
 | Copy-paste component examples (SolidJS) | `examples/components/` (Dialog, Feedback, ResourceState, DataTable, PageHeader, chartTheme) |
+| Table search, column sorting and column filters (how filters look and behave) | `references/components.md` §6.1, `examples/components/TableControls.tsx` (React reference), `examples/base.css` |
 | Validation procedure and script | `references/validation.md`, `scripts/validate-design.mjs` |
 | How to install this skill in another repo | `INSTALL.md` |
 

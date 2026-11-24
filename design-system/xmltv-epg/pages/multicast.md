@@ -9,15 +9,19 @@ Overrides [`../MASTER.md`](../MASTER.md) only for the multicast output editor.
   The master create/edit rules (dirty banner, discard confirmation,
   `beforeunload`) apply unchanged.
 - **Station table is editable.** Rows hold inputs (channel name, frequency,
-  transport/network/service ID) instead of read-only values; the second header
-  row holds per-column filters, matching the column order of the operator's
-  previous headend tool. Duplicate network/transport/service ID triples set
+  transport/network/service ID) instead of read-only values. Search, sorting
+  and column filters use the shared table toolkit (Kinet skill §6.1) inside a
+  `.data-panel` with its own toolbar; the table keeps the column order of the
+  operator's previous headend tool. Row order and membership are frozen while
+  a cell is edited (`rowKey`), so a station never jumps away or disappears
+  while typing; they update when the search, a filter or the sort changes.
+  Duplicate network/transport/service ID triples set
   `aria-invalid` on the affected inputs with a `title` that explains why.
 - **Add / relink row.** Source select → channel search → channel select →
   "Add station". The link action on a row reuses the same controls to point
   the row at another channel without changing its DVB identifiers. Stations
   whose channel was deleted show a "Channel missing" error badge.
-- **Filtered bulk set.** When station filters are active, a `.bulk-bar`
+- **Filtered bulk set.** When a station search or filter is active, a `.bulk-bar`
   offers setting frequency, transport stream ID and network ID for all shown
   stations.
 - **Live stream state** in the list refreshes every 5 s: badge with text

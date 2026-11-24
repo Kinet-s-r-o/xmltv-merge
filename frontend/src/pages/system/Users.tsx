@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, LockOpen, Pencil, Plus, Save, Search, ShieldCheck, Trash2, UserPlus, Users as UsersIcon } from 'lucide-react'
-import { systemApi, type AuthType, type User, type UserInput } from '../../api/client'
+import { systemApi, type User, type UserInput } from '../../api/client'
 import { UserTypeIndicator } from '../../components/auth/UserTypeIndicator'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Dialog } from '../../components/ui/Dialog'
@@ -9,6 +9,7 @@ import { useFeedback } from '../../components/ui/Feedback'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../../components/ui/ResourceState'
+import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
 import { useAuth } from '../../lib/auth'
 import { formatTimestamp } from '../../lib/sourceStatus'
 
@@ -38,7 +39,34 @@ function isLocked(user: User) {
   return user.locked_until ? new Date(user.locked_until).getTime() > Date.now() : false
 }
 
-type TypeFilter = 'all' | AuthType
+const USER_COLUMNS: TableColumn<User>[] = [
+  {
+    id: 'type',
+    label: 'Type',
+    kind: 'enum',
+    value: (user) => user.auth_type,
+    options: [{ value: 'local', label: 'Local' }, { value: 'remote', label: 'Remote (RADIUS)' }],
+  },
+  { id: 'user', label: 'User', kind: 'text', value: (user) => user.username },
+  { id: 'role', label: 'Role', kind: 'text', value: (user) => user.role_name },
+  {
+    id: 'status',
+    label: 'Status',
+    kind: 'enum',
+    value: (user) => (!user.enabled ? 'disabled' : isLocked(user) ? 'locked' : 'enabled'),
+    options: [{ value: 'locked', label: 'Locked' }, { value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }],
+  },
+  {
+    id: 'totp',
+    label: '2FA',
+    kind: 'enum',
+    value: (user) => (user.totp_enabled ? 'enabled' : user.totp_required ? 'required' : 'off'),
+    options: [{ value: 'required', label: 'Required, not set up' }, { value: 'enabled', label: 'Enabled' }, { value: 'off', label: 'Off' }],
+  },
+  { id: 'last_login', label: 'Last sign-in', kind: 'date', value: (user) => user.last_login_at },
+]
+
+const userSearchText = (user: User) => [user.username, user.display_name, user.email, user.role_name].join(' ')
 
 export function Users() {
   const queryClient = useQueryClient()
@@ -46,8 +74,6 @@ export function Users() {
   const { session, can } = useAuth()
   const canEdit = can('users', 'edit')
   const canDelete = can('users', 'delete')
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<UserForm>(EMPTY_FORM)
@@ -182,12 +208,9 @@ export function Users() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [formDirty])
 
-  const query = search.trim().toLocaleLowerCase()
-  const filtered = users.filter((user) => {
-    const matchesSearch = !query || [user.username, user.display_name, user.email, user.role_name].some((value) => value.toLocaleLowerCase().includes(query))
-    return matchesSearch && (typeFilter === 'all' || user.auth_type === typeFilter)
-  })
-  const { visible, paginationProps } = usePagedRows(filtered, 'xmltv-users-page-size', `${query}|${typeFilter}`)
+  const table = useTableControls(users, USER_COLUMNS, { searchText: userSearchText })
+  const filtered = table.rows
+  const { visible, paginationProps } = usePagedRows(filtered, 'xmltv-users-page-size', table.resetKey)
   const localCount = users.filter((user) => user.auth_type === 'local').length
 
   const passwordNeeded = form.auth_type === 'local' && (editingId === null || editingUser?.auth_type === 'remote')
@@ -328,22 +351,11 @@ export function Users() {
             <h2 id="users-table-title">User accounts</h2>
             <p className="font-mono">{filtered.length} of {users.length} shown · {localCount} local · {users.length - localCount} remote</p>
           </div>
-          <div className="toolbar-filters">
-            <label className="search-field w-full sm:w-64">
-              <span className="sr-only">Search users by name, e-mail or role</span>
-              <Search className="h-3.5 w-3.5" aria-hidden="true" />
-              <input type="search" className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, e-mail or role" />
-            </label>
-            <label className="w-full sm:w-44">
-              <span className="sr-only">Filter users by type</span>
-              <select className="input" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}>
-                <option value="all">All types</option>
-                <option value="local">Local</option>
-                <option value="remote">Remote (RADIUS)</option>
-              </select>
-            </label>
-          </div>
+          {users.length > 0 && (
+            <TableSearch controls={table} label="Search users by name, e-mail or role" placeholder="Search name, e-mail or role" />
+          )}
         </div>
+        {users.length > 0 && <TableFilterSummary controls={table} />}
 
         {usersQuery.isLoading ? (
           <LoadingState title="Loading users" compact />
@@ -352,20 +364,15 @@ export function Users() {
         ) : users.length === 0 ? (
           <EmptyState icon={UsersIcon} title="No user accounts" message="Add a local or remote user to give someone access." />
         ) : filtered.length === 0 ? (
-          <EmptyState icon={Search} title="No users match the current filters" message="Clear the search or choose All types.">
-            <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setTypeFilter('all') }}>Clear filters</button>
+          <EmptyState icon={Search} title="No users match the current filters" message="Change the search or column filters, or clear them to list all user accounts.">
+            <button type="button" className="btn btn-secondary" onClick={table.clearAll}>Clear filters</button>
           </EmptyState>
         ) : (
           <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Type</th>
-                  <th scope="col">User</th>
-                  <th scope="col">Role</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">2FA</th>
-                  <th scope="col">Last sign-in</th>
+                  {USER_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
                   <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Pencil, Plug, Plus, Save, Server, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, Pencil, Plug, Plus, Save, Search, Server, Trash2, XCircle } from 'lucide-react'
 import { systemApi, type RadiusServer, type RadiusServerInput, type RadiusTestResult } from '../../api/client'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Dialog } from '../../components/ui/Dialog'
@@ -8,6 +8,7 @@ import { useFeedback } from '../../components/ui/Feedback'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../../components/ui/ResourceState'
+import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
 import { useAuth } from '../../lib/auth'
 
 const EMPTY_FORM: RadiusServerInput = {
@@ -26,6 +27,35 @@ const EMPTY_FORM: RadiusServerInput = {
 function sameForm(a: RadiusServerInput, b: RadiusServerInput) {
   return (Object.keys(a) as Array<keyof RadiusServerInput>).every((key) => a[key] === b[key])
 }
+
+const formatAddress = (server: RadiusServer) => `${server.host.includes(':') ? `[${server.host}]` : server.host}:${server.port}`
+
+const RADIUS_COLUMNS: TableColumn<RadiusServer>[] = [
+  { id: 'priority', label: 'Priority', kind: 'number', align: 'right', value: (server) => server.priority },
+  { id: 'name', label: 'Server', kind: 'text', value: (server) => server.name },
+  { id: 'address', label: 'Address', kind: 'text', value: formatAddress },
+  { id: 'timing', label: 'Timing', kind: 'number', filterHint: 'timeout in seconds', value: (server) => server.timeout_seconds },
+  {
+    id: 'security',
+    label: 'Security',
+    kind: 'enum',
+    value: (server) => (!server.has_secret ? 'no_secret' : server.require_message_authenticator ? 'secured' : 'msg_auth_optional'),
+    options: [
+      { value: 'no_secret', label: 'No secret' },
+      { value: 'msg_auth_optional', label: 'Msg-Auth optional' },
+      { value: 'secured', label: 'Secret stored, Msg-Auth required' },
+    ],
+  },
+  {
+    id: 'enabled',
+    label: 'Sign-in',
+    kind: 'enum',
+    value: (server) => (server.enabled ? 'enabled' : 'disabled'),
+    options: [{ value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }],
+  },
+]
+
+const radiusSearchText = (server: RadiusServer) => [server.name, formatAddress(server), server.nas_identifier].join(' ')
 
 const inRange = (value: number, min: number, max: number) => Number.isInteger(value) && value >= min && value <= max
 
@@ -112,7 +142,8 @@ export function RadiusServers() {
   const editingServer = servers.find((server) => server.id === editingId)
   const formDirty = formOpen && !sameForm(form, initialForm)
   const setField = <K extends keyof RadiusServerInput>(key: K, value: RadiusServerInput[K]) => setForm((current) => ({ ...current, [key]: value }))
-  const { visible, paginationProps } = usePagedRows(servers, 'xmltv-radius-page-size')
+  const table = useTableControls(servers, RADIUS_COLUMNS, { searchText: radiusSearchText })
+  const { visible, paginationProps } = usePagedRows(table.rows, 'xmltv-radius-page-size', table.resetKey)
 
   const resetForm = () => {
     setFormOpen(false)
@@ -310,9 +341,11 @@ export function RadiusServers() {
         <div className="table-panel-toolbar">
           <div>
             <h2 id="radius-table-title">Configured servers</h2>
-            <p className="font-mono">{servers.length} servers · {enabledCount} enabled · tried in priority order</p>
+            <p className="font-mono">{table.isFiltered ? `${table.rows.length} of ${servers.length}` : servers.length} servers · {enabledCount} enabled · tried in priority order</p>
           </div>
+          {servers.length > 0 && <TableSearch controls={table} label="Search RADIUS servers by name, address or NAS-Identifier" placeholder="Search name, address or NAS-ID" />}
         </div>
+        {servers.length > 0 && <TableFilterSummary controls={table} />}
         {serversQuery.isLoading ? (
           <LoadingState title="Loading RADIUS servers" compact />
         ) : serversQuery.isError ? (
@@ -325,17 +358,16 @@ export function RadiusServers() {
               </button>
             )}
           </EmptyState>
+        ) : table.rows.length === 0 ? (
+          <EmptyState icon={Search} title="No RADIUS servers match the current filters" message="Change the search or column filters, or clear them to list all servers.">
+            <button type="button" className="btn btn-secondary" onClick={table.clearAll}>Clear filters</button>
+          </EmptyState>
         ) : (
           <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th scope="col" className="text-right">Priority</th>
-                  <th scope="col">Server</th>
-                  <th scope="col">Address</th>
-                  <th scope="col">Timing</th>
-                  <th scope="col">Security</th>
-                  <th scope="col">Sign-in</th>
+                  {RADIUS_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
                   <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>
@@ -349,7 +381,7 @@ export function RadiusServers() {
                         <span className="table-text font-semibold">{server.name}</span>
                         <span className="cell-sub font-mono">NAS-Identifier {server.nas_identifier}</span>
                       </td>
-                      <td><span className="table-text font-mono whitespace-nowrap">{server.host.includes(':') ? `[${server.host}]` : server.host}:{server.port}</span></td>
+                      <td><span className="table-text font-mono whitespace-nowrap">{formatAddress(server)}</span></td>
                       <td><span className="table-text font-mono whitespace-nowrap">{server.timeout_seconds} s × {server.retries + 1}</span></td>
                       <td>
                         <span className="flex flex-wrap gap-1.5">
@@ -397,7 +429,7 @@ export function RadiusServers() {
             </table>
           </div>
         )}
-        {!serversQuery.isLoading && !serversQuery.isError && servers.length > 0 && <Pagination {...paginationProps} itemLabel="servers" />}
+        {!serversQuery.isLoading && !serversQuery.isError && table.rows.length > 0 && <Pagination {...paginationProps} itemLabel="servers" />}
       </section>
 
       <ConfirmDialog

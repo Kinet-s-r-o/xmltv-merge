@@ -18,6 +18,15 @@ export const healthLabel: Record<SourceHealth, string> = {
   disabled: 'Disabled',
 }
 
+/** Status filter/sort order: sources that need action first. */
+export const HEALTH_OPTIONS: { value: SourceHealth; label: string }[] = (['failed', 'pending', 'healthy', 'disabled'] as const)
+  .map((health) => ({ value: health, label: healthLabel[health] }))
+
+/** Full-text search haystack for source tables (name, URL, status, last error). */
+export function sourceSearchText(source: Source) {
+  return [source.name, source.source_url, healthLabel[sourceHealth(source)], source.last_import_error ?? ''].join(' ')
+}
+
 export const healthBadge: Record<SourceHealth, string> = {
   healthy: 'badge badge-success',
   failed: 'badge badge-error',

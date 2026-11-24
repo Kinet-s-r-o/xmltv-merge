@@ -15,6 +15,7 @@ import { useFeedback } from '../components/ui/Feedback'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
+import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
 import { saveBlob, useConfigTransfer } from '../lib/configTransfer'
 import { formatTimestamp } from '../lib/sourceStatus'
 import { useTableSelection } from '../lib/tableSelection'
@@ -42,6 +43,12 @@ function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
+// Stream state filter/sort order: problems first.
+const STATE_ORDER: MulticastStreamState[] = ['error', 'starting', 'running', 'stopped', 'disabled_on_server']
+
+const multicastSearchText = (o: MulticastOutput) =>
+  [o.name, o.description, `${o.multicast_address}:${o.multicast_port}`, o.interface ?? '', o.timezone].join(' ')
+
 function kbps(value?: number) {
   return value && value > 0 ? value.toFixed(2) : '—'
 }
@@ -52,7 +59,6 @@ export function MulticastOutputs() {
   const canDelete = can('multicast', 'delete')
   const queryClient = useQueryClient()
   const { notify } = useFeedback()
-  const [search, setSearch] = useState('')
   const [editor, setEditor] = useState<{ output: MulticastOutput | null; initial: MulticastOutputInput } | null>(null)
   const [editorError, setEditorError] = useState<string | null>(null)
   const [loadingEditId, setLoadingEditId] = useState<number | null>(null)
@@ -75,6 +81,32 @@ export function MulticastOutputs() {
     return map
   }, [statusList])
   const statusOf = (o: MulticastOutput) => statusById.get(o.id) ?? o.status
+  const columns = useMemo<TableColumn<MulticastOutput>[]>(() => {
+    const status = (o: MulticastOutput) => statusById.get(o.id) ?? o.status
+    return [
+      { id: 'name', label: 'Name', kind: 'text', value: (o) => o.name },
+      { id: 'address', label: 'Multicast', kind: 'text', value: (o) => `${o.multicast_address}:${o.multicast_port}` },
+      { id: 'pid', label: 'PID', kind: 'number', align: 'right', value: (o) => o.pid },
+      { id: 'chunk', label: 'Chunk (s)', kind: 'number', align: 'right', value: (o) => o.chunk_seconds },
+      { id: 'bitrate', label: 'Bitrate (kbps)', kind: 'number', align: 'right', filterHint: 'computed kbps', value: (o) => status(o)?.computed_kbps || null },
+      { id: 'timezone', label: 'Timezone', kind: 'text', value: (o) => o.timezone },
+      { id: 'stations', label: 'Stations', kind: 'number', align: 'right', value: (o) => o.service_count },
+      {
+        id: 'stream',
+        label: 'Stream',
+        kind: 'enum',
+        value: (o) => status(o)?.state ?? (o.enabled ? 'starting' : 'stopped'),
+        options: STATE_ORDER.map((state) => ({ value: state, label: STATE_LABEL[state] })),
+      },
+      {
+        id: 'enabled',
+        label: 'Status',
+        kind: 'enum',
+        value: (o) => (o.enabled ? 'on' : 'off'),
+        options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+      },
+    ]
+  }, [statusById])
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['multicast-outputs'] })
@@ -127,10 +159,9 @@ export function MulticastOutputs() {
     },
   })
 
-  const query = search.trim().toLocaleLowerCase()
-  const filtered = outputs.filter((o) =>
-    !query || o.name.toLocaleLowerCase().includes(query) || o.description.toLocaleLowerCase().includes(query) || o.multicast_address.includes(query))
-  const { visible, paginationProps } = usePagedRows(filtered, 'xmltv-multicast-page-size', query)
+  const table = useTableControls(outputs, columns, { searchText: multicastSearchText })
+  const filtered = table.rows
+  const { visible, paginationProps } = usePagedRows(filtered, 'xmltv-multicast-page-size', table.resetKey)
   const selection = useTableSelection(filtered, visible, outputId)
 
   const openEdit = async (output: MulticastOutput) => {
@@ -245,14 +276,11 @@ export function MulticastOutputs() {
             <h2 id="multicast-table-title">Configured multicast outputs</h2>
             <p className="font-mono">{filtered.length} of {outputs.length} shown · stream status refreshes every 5 s</p>
           </div>
-          <div className="toolbar-filters">
-            <label className="search-field w-full sm:w-64">
-              <span className="sr-only">Search multicast outputs by name, description or address</span>
-              <Search className="h-3.5 w-3.5" aria-hidden="true" />
-              <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or address" />
-            </label>
-          </div>
+          {outputs.length > 0 && (
+            <TableSearch controls={table} label="Search multicast outputs by name, description, address or timezone" placeholder="Search name, address or timezone" />
+          )}
         </div>
+        {outputs.length > 0 && <TableFilterSummary controls={table} />}
 
         {selection.count > 0 && (
           <div className="bulk-bar" role="region" aria-label="Bulk actions for selected multicast outputs">
@@ -284,8 +312,8 @@ export function MulticastOutputs() {
             {canEdit && <button type="button" className="btn btn-primary" onClick={openCreate}><Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add multicast output</button>}
           </EmptyState>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={Search} title="No multicast output matches the search" message="Clear the search to see all outputs.">
-            <button type="button" className="btn btn-secondary" onClick={() => setSearch('')}>Clear search</button>
+          <EmptyState icon={Search} title="No multicast outputs match the current filters" message="Change the search or column filters, or clear them to list all outputs.">
+            <button type="button" className="btn btn-secondary" onClick={table.clearAll}>Clear filters</button>
           </EmptyState>
         ) : (
           <div className="table-scroll" onKeyDown={selection.tableKeyDown(() => { if (canDelete) setDeleteTargets(selection.selectedRows) })}>
@@ -298,15 +326,7 @@ export function MulticastOutputs() {
                       checked={selection.pageState === 'all'} onChange={selection.togglePage}
                       aria-label="Select all multicast outputs on this page" title="Select all on this page (Ctrl+A)" aria-keyshortcuts="Control+A Meta+A" />
                   </th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Multicast</th>
-                  <th scope="col" className="text-right">PID</th>
-                  <th scope="col" className="text-right">Chunk (s)</th>
-                  <th scope="col" className="text-right">Bitrate (kbps)</th>
-                  <th scope="col">Timezone</th>
-                  <th scope="col" className="text-right">Stations</th>
-                  <th scope="col">Stream</th>
-                  <th scope="col">Status</th>
+                  {columns.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
                   <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>

@@ -28,6 +28,7 @@ rebrand or "improve" beyond the Kinet reference.
 | Page header | `frontend/src/components/ui/PageHeader.tsx` |
 | Loading / empty / error states | `frontend/src/components/ui/ResourceState.tsx` |
 | Table footer pagination | `frontend/src/components/ui/Pagination.tsx` |
+| Table search, column sorting and column filters | `frontend/src/components/ui/TableControls.tsx` |
 | Source status labels and timestamp formatting | `frontend/src/lib/sourceStatus.ts` |
 
 ## Non-negotiable rules (from Kinet)
@@ -161,6 +162,16 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   50, 100 (default 20), remembered per table in `localStorage`, page reset to
   1 when filters or page size change. The EPG grid uses the same sizes for
   "Stations per page".
+- **Search, sorting and column filters** (`useTableControls`, `ColumnHeader`,
+  `TableFilterSummary` in `frontend/src/components/ui/TableControls.tsx`):
+  full-text `.search-field` right-aligned in the `.table-panel-toolbar`;
+  every record column header has a `.sort-btn` (asc → desc → off,
+  `aria-sort`) and a 20px `.filter-toggle` that opens the 320px
+  `.filter-dropdown` (operator + value rule rows, Add rule, Clear / Apply);
+  active rules show as `.table-filter-chip` pills with Clear all. Paging
+  runs on the filtered, sorted rows. The full look and behaviour is the
+  Kinet skill contract (`.claude/skills/ui-ux/references/components.md`
+  §6.1).
 - **Row selection and bulk actions** (`useTableSelection` in
   `frontend/src/lib/tableSelection.ts`): a 40px `.cell-select` first column
   with `.checkbox` row boxes (`data-table-select-row`) and a header

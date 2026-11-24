@@ -337,6 +337,40 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .btn-link { padding: 0; color: rgb(var(--accent-hover)); background: none; border: 0; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
   .btn-link:hover { color: rgb(var(--accent)); }
   .channel-logo { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; object-fit: contain; color: rgb(var(--text-muted)); background: rgb(var(--bg-elevated)); border: 1px solid rgb(var(--border-subtle)); border-radius: var(--radius-control); font-size: 11px; font-weight: 600; }
+  /* Column sorting + filtering (Kinet table toolkit, components/ui/TableControls.tsx) */
+  .th-inner { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; vertical-align: middle; }
+  .sort-btn { display: inline-flex; align-items: center; gap: 4px; padding: 0; color: inherit; background: none; border: 0; font: inherit; letter-spacing: inherit; white-space: nowrap; cursor: pointer; }
+  .sort-btn > svg { flex: 0 0 auto; color: rgb(var(--text-muted)); transition: color var(--motion-fast) ease; }
+  .sort-btn:hover > svg, .sort-btn[data-sorted] > svg { color: rgb(var(--accent)); }
+  .filter-toggle { position: relative; display: inline-grid; place-items: center; flex: 0 0 auto; width: 20px; height: 20px; padding: 0; color: rgb(var(--text-muted)); background: none; border: 1px solid transparent; border-radius: var(--radius-control); cursor: pointer; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+  .filter-toggle:hover { color: rgb(var(--text-secondary)); background: rgb(var(--bg-hover)); }
+  .filter-toggle.is-active { color: rgb(var(--accent)); background: rgb(var(--accent) / .1); border-color: rgb(var(--accent) / .4); }
+  .filter-toggle-badge { position: absolute; top: -6px; right: -6px; min-width: 12px; height: 12px; padding: 0 3px; color: rgb(var(--text-on-action)); background: rgb(var(--accent)); border-radius: 999px; font-size: 8px; font-weight: 600; line-height: 12px; text-align: center; letter-spacing: 0; }
+  .filter-dropdown { position: fixed; top: var(--dropdown-top, 0); left: var(--dropdown-left, 0); z-index: 110; width: 320px; max-width: calc(100vw - 16px); color: rgb(var(--text-primary)); background: rgb(var(--bg-surface)); border: 1px solid rgb(var(--border-default)); border-radius: var(--radius-control); box-shadow: 0 12px 32px rgb(var(--shadow-color) / .28); font-size: 11px; font-weight: 400; letter-spacing: 0; text-align: left; white-space: normal; }
+  .filter-dropdown-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgb(var(--border-subtle)); }
+  .filter-dropdown-header h3 { margin: 0; color: rgb(var(--text-primary)); font-size: 11px; font-weight: 600; }
+  .filter-dropdown-close, .filter-rule-remove { display: inline-grid; place-items: center; flex: 0 0 auto; padding: 0; color: rgb(var(--text-muted)); background: none; border: 0; border-radius: var(--radius-control); cursor: pointer; }
+  .filter-dropdown-close { width: 20px; height: 20px; }
+  .filter-rule-remove { width: 28px; height: 28px; }
+  .filter-dropdown-close:hover, .filter-rule-remove:hover:not(:disabled) { color: rgb(var(--text-primary)); background: rgb(var(--bg-hover)); }
+  .filter-rule-remove:disabled { opacity: .4; cursor: not-allowed; }
+  .filter-dropdown-body { display: grid; gap: 8px; max-height: 320px; overflow-y: auto; padding: 10px; }
+  .filter-dropdown-label { color: rgb(var(--text-muted)); font-size: 10px; font-weight: 600; }
+  .filter-rule { display: grid; grid-template-columns: 124px minmax(0, 1fr) 28px; align-items: center; gap: 6px; }
+  .filter-dropdown .input { min-height: 28px; padding: 4px 8px; font-size: 11px; }
+  .filter-rule-novalue { color: rgb(var(--text-muted)); font-size: 11px; }
+  .filter-add-rule { display: inline-flex; align-items: center; justify-self: start; gap: 4px; padding: 4px 10px; color: rgb(var(--accent)); background: none; border: 1px dashed rgb(var(--accent) / .4); border-radius: var(--radius-control); font-size: 10px; font-weight: 600; cursor: pointer; }
+  .filter-add-rule:hover { background: rgb(var(--accent) / .08); }
+  .filter-dropdown-footer { display: flex; justify-content: flex-end; gap: 6px; padding: 8px 10px; border-top: 1px solid rgb(var(--border-subtle)); }
+  .filter-btn-apply, .filter-btn-clear { min-height: 26px; padding: 4px 10px; font-size: 10px; font-weight: 600; }
+  .table-filter-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px 16px; border-bottom: 1px solid rgb(var(--border-subtle)); }
+  .table-filter-summary-label { color: rgb(var(--text-muted)); font-size: 10px; font-weight: 600; }
+  .table-filter-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 2px 3px 2px 9px; color: rgb(var(--text-secondary)); background: rgb(var(--bg-elevated)); border: 1px solid rgb(var(--border-default)); border-radius: 999px; font-size: 11px; }
+  .table-filter-chip strong { color: rgb(var(--text-primary)); font-weight: 600; }
+  .table-filter-chip button { display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0; color: rgb(var(--text-muted)); background: none; border: 0; border-radius: 999px; cursor: pointer; }
+  .table-filter-chip button:hover { color: rgb(var(--text-primary)); background: rgb(var(--bg-hover)); }
+  .table-filter-clear { min-height: 24px; padding: 2px 8px; color: rgb(var(--text-muted)); background: none; border: 0; border-radius: var(--radius-control); font-size: 11px; font-weight: 600; cursor: pointer; }
+  .table-filter-clear:hover { color: rgb(var(--accent)); }
   .table-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid rgb(var(--border-subtle)); color: rgb(var(--text-muted)); font-size: 11px; }
   .table-footer-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .table-footer select.input { width: auto; min-height: 30px; padding: 4px 8px; }
@@ -530,6 +564,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .btn { min-height: 44px; }
   .btn.btn-icon { width: 44px; }
   .icon-button, .data-table .icon-button { width: 44px; height: 44px; }
+  .filter-toggle { width: 32px; height: 32px; }
+  .filter-dropdown .input, .filter-rule-remove { min-height: 44px; }
+  .filter-rule { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
+  .filter-rule-remove, .filter-dropdown-close { width: 44px; height: 44px; }
+  .table-filter-chip button { width: 32px; height: 32px; }
+  .table-filter-clear { min-height: 44px; }
   .switch-control { min-height: 44px; }
   .check-label { min-height: 44px; }
   .feed-item, .picker-row { min-height: 52px; }
