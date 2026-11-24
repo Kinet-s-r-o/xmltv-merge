@@ -326,6 +326,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .data-table th.text-center, .data-table td.text-center { text-align: center; }
   .cell-sub { display: block; margin-top: 2px; color: rgb(var(--text-muted)); font-size: 11px; }
   .cell-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  /* Row selection + bulk actions (Kinet table selection contract) */
+  .data-table th.cell-select, .data-table td.cell-select { width: 40px; padding-right: 0; }
+  .data-table tbody tr.is-selected, .data-table tbody tr.is-selected:hover { background: rgb(var(--accent) / .08); }
+  .bulk-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; min-height: 44px; padding: 7px 16px; color: rgb(var(--text-secondary)); background: rgb(var(--accent) / .08); border-bottom: 1px solid rgb(var(--accent) / .25); font-size: 12px; }
+  .bulk-bar-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; min-width: 0; }
+  .bulk-bar-status strong { color: rgb(var(--text-primary)); font-weight: 600; }
+  .bulk-bar-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .btn-link { padding: 0; color: rgb(var(--accent-hover)); background: none; border: 0; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .btn-link:hover { color: rgb(var(--accent)); }
   .channel-logo { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; object-fit: contain; color: rgb(var(--text-muted)); background: rgb(var(--bg-elevated)); border: 1px solid rgb(var(--border-subtle)); border-radius: var(--radius-control); font-size: 11px; font-weight: 600; }
   .table-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid rgb(var(--border-subtle)); color: rgb(var(--text-muted)); font-size: 11px; }
   .table-footer-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

@@ -10,11 +10,12 @@
 | `src/components/ui/` | Shared Kinet components: `Dialog`, `ConfirmDialog`, `Feedback` (notice stack, `useFeedback`), `PageHeader`, `ResourceState` (loading/empty/error), `Pagination`, `AppErrorBoundary`. | Dialog a11y contract and copy rules in the design master. |
 | `src/components/sources/SourceImportDialog.tsx` | Preview/confirm dialog for source configuration import (new / updated / unchanged, validation errors). | `../docs/source-config-format.md`. |
 | `src/lib/theme.ts`, `src/lib/sourceStatus.ts` | Theme preference (dark/light/system); source status labels, badges and timestamp formatting. | Keep status labels in sync across Dashboard and Sources. |
+| `src/lib/tableSelection.ts` | `useTableSelection`: row checkboxes, page select-all, Shift range, Ctrl/Cmd+A and Delete shortcuts for data tables. | Selection rules in the design master (Tables → Row selection). |
 | `src/pages/Dashboard.tsx` | Source-backed counts and quick links. | Source statistics contract. |
 | `src/pages/EPGView.tsx` | Date/channel filtered programme grid, paging and selection. | Programme query parameters and detail navigation. |
 | `src/pages/Channels.tsx` | Channel listing with search and source filter. | Channel API and source list. |
 | `src/pages/ProgrammeDetail.tsx` | Full programme metadata, credits and categories. | Programme detail response shape. |
-| `src/pages/Sources.tsx` | URL source CRUD (add/edit in a modal with unsaved-changes guard), refresh, activation, search, paging, import status UI and XML configuration Import/Export. | Source lifecycle API and disabled-source behavior. |
+| `src/pages/Sources.tsx` | URL source CRUD (add/edit in a modal with unsaved-changes guard), refresh, activation, search, paging, import status UI, XML configuration Import/Export and bulk delete / download & import of selected sources. | Source lifecycle API and disabled-source behavior. |
 | `src/pages/Outputs.tsx` | Configurable output editor, channel search/source labels, field toggles and public URL. | Output/channel serialization contract. |
 | `src/index.css` | Kinet tokens (dark/light), `@theme inline` semantic utilities, base reset and all component classes, including EPG timeline and output editor. | Global visual behavior; no raw hex or palette-shade utilities. |
 | `../design-system/xmltv-epg/MASTER.md` | Project-wide visual source of truth. | Read before UI changes; page overrides are under its `pages/` directory. |

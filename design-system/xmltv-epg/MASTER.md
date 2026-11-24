@@ -150,6 +150,23 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   50, 100 (default 20), remembered per table in `localStorage`, page reset to
   1 when filters or page size change. The EPG grid uses the same sizes for
   "Stations per page".
+- **Row selection and bulk actions** (`useTableSelection` in
+  `frontend/src/lib/tableSelection.ts`): a 40px `.cell-select` first column
+  with `.checkbox` row boxes (`data-table-select-row`) and a header
+  select-all for the current page (`data-table-select-all`, indeterminate
+  when partial). Shift+click selects a range on the page, Ctrl/Cmd+A selects
+  the page and Delete opens the bulk-delete confirmation while focus is in
+  the table. Selected rows use `tr.is-selected` (accent `/.08`). Selection
+  only covers rows matching the current filters. With a selection, a
+  `.bulk-bar` appears under the toolbar: "N of M selected", "Select all M"
+  (`.btn-link`), then `.btn-xs` actions — non-destructive first, the
+  `.btn-danger` delete (`aria-keyshortcuts="Delete"`) after, "Clear
+  selection" last. Bulk deletes always go through a `ConfirmDialog` that
+  names the affected records. Long bulk runs process one record at a time,
+  show "Action n of N: name" with a spinner in the bar (`role="status"`),
+  offer Stop (finishes the current record), lock row actions and selection,
+  warn on page unload, and end with one summary notification listing
+  failures and skipped records.
 - **Dialogs:** `Dialog` sizes small 420 / medium 560 / large 880; Cancel is
   `.btn-secondary`, confirm `.btn-primary` or `.btn-danger`. Not draggable or
   resizable (Kinet's drag/resize affordance is not adopted in this app).

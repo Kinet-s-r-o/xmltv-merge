@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Database, Download, FileUp, Link2, Pencil, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react'
+import { Database, Download, FileUp, Link2, Pencil, Plus, RefreshCw, Save, Search, Square, Trash2, X } from 'lucide-react'
 import { api, ApiError, CreateSourceInput, Source } from '../api/client'
 import { SourceImportDialog, type SourceImportState } from '../components/sources/SourceImportDialog'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -10,8 +10,28 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 import { formatInterval, formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
+import { useTableSelection } from '../lib/tableSelection'
 
 type SourceStatusFilter = 'all' | 'healthy' | 'attention' | 'disabled'
+
+interface BulkRun {
+  kind: 'delete' | 'refresh'
+  total: number
+  done: number
+  current: string
+  stopping: boolean
+}
+
+const sourceId = (source: Source) => source.id
+
+function nameList(sources: Source[], limit = 5) {
+  const names = sources.slice(0, limit).map((source) => source.name).join(', ')
+  return sources.length > limit ? `${names} and ${sources.length - limit} more` : names
+}
+
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`
+}
 
 interface SourceFormValues {
   name: string
@@ -50,6 +70,9 @@ export function Sources() {
   const importFileRef = useRef<File | null>(null)
   const [importState, setImportState] = useState<SourceImportState>({ status: 'closed' })
   const [importApplyError, setImportApplyError] = useState<string | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkRun, setBulkRun] = useState<BulkRun | null>(null)
+  const bulkStopRef = useRef(false)
 
   const { data, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
@@ -212,6 +235,75 @@ export function Sources() {
   })
 
   const { visible: visibleSources, paginationProps } = usePagedRows(filteredSources, 'xmltv-sources-page-size', `${query}|${statusFilter}`)
+  const selection = useTableSelection(filteredSources, visibleSources, sourceId)
+  const selectedSources = selection.selectedRows
+  const selectedRefreshable = selectedSources.filter((source) => source.enabled && source.source_url)
+  const bulkBusy = bulkRun !== null
+
+  /** Runs one request per source in sequence so imports do not compete; Stop ends after the current source. */
+  const runBulk = async (kind: BulkRun['kind'], targets: Source[], action: (source: Source) => Promise<unknown>) => {
+    bulkStopRef.current = false
+    const failed: { source: Source; message: string }[] = []
+    let done = 0
+    for (const source of targets) {
+      if (bulkStopRef.current) break
+      setBulkRun({ kind, total: targets.length, done, current: source.name, stopping: false })
+      try {
+        await action(source)
+      } catch (err) {
+        failed.push({ source, message: err instanceof Error ? err.message : String(err) })
+      }
+      done += 1
+      if (kind === 'refresh') queryClient.invalidateQueries({ queryKey: ['sources'] })
+    }
+    setBulkRun(null)
+    invalidateGuideData()
+    return { done, failed, stopped: done < targets.length }
+  }
+
+  const bulkDelete = async () => {
+    const targets = selectedSources
+    setBulkDeleteOpen(false)
+    if (editingId !== null && targets.some((source) => source.id === editingId)) resetForm()
+    const { done, failed, stopped } = await runBulk('delete', targets, (source) => api.deleteSource(source.id))
+    const deleted = done - failed.length
+    notify({
+      tone: failed.length > 0 ? 'error' : 'success',
+      title: failed.length > 0 ? `${plural(failed.length, 'source')} could not be deleted` : `${plural(deleted, 'source')} deleted`,
+      message: [
+        deleted > 0 ? `${plural(deleted, 'source')} and their channels and programmes were removed.` : '',
+        failed.length > 0 ? `Failed: ${failed.map(({ source, message }) => `${source.name} (${message})`).join('; ')}.` : '',
+        stopped ? `Stopped; ${plural(targets.length - done, 'source')} were not deleted.` : '',
+      ].filter(Boolean).join(' '),
+    })
+  }
+
+  const bulkRefresh = async () => {
+    const targets = selectedRefreshable
+    const skipped = selectedSources.length - targets.length
+    const { done, failed, stopped } = await runBulk('refresh', targets, (source) => api.refreshSource(source.id))
+    const imported = done - failed.length
+    notify({
+      tone: failed.length > 0 ? 'error' : 'success',
+      title: failed.length > 0 ? `${plural(failed.length, 'source')} failed to import` : `${plural(imported, 'source')} downloaded and imported`,
+      message: [
+        imported > 0 && failed.length > 0 ? `${plural(imported, 'source')} imported.` : '',
+        failed.length > 0 ? `Failed: ${failed.map(({ source, message }) => `${source.name} (${message})`).join('; ')}.` : '',
+        skipped > 0 ? `${plural(skipped, 'disabled source')} skipped.` : '',
+        stopped ? `Stopped; ${plural(targets.length - done, 'source')} were not refreshed.` : '',
+      ].filter(Boolean).join(' ') || 'Channels and programmes are up to date in the EPG grid.',
+    })
+  }
+
+  useEffect(() => {
+    if (!bulkBusy) return
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [bulkBusy])
 
   const handleEdit = (source: Source) => openForm({
     name: source.name,
@@ -449,6 +541,61 @@ export function Sources() {
           </div>
         </div>
 
+        {(selection.count > 0 || bulkRun) && (
+          <div className="bulk-bar" role="region" aria-label="Bulk actions for selected sources">
+            {bulkRun ? (
+              <p className="bulk-bar-status" role="status" aria-live="polite">
+                <span className="spinner spinner-sm" aria-hidden="true" />
+                {bulkRun.kind === 'delete' ? 'Deleting' : 'Downloading and importing'} {bulkRun.done + 1} of {bulkRun.total}: <strong>{bulkRun.current}</strong>
+                {bulkRun.stopping && <span className="text-muted"> · stopping after this source</span>}
+              </p>
+            ) : (
+              <p className="bulk-bar-status" role="status" aria-live="polite">
+                <strong className="font-mono">{selection.count}</strong> of {filteredSources.length} selected
+                {selection.count < filteredSources.length && (
+                  <button type="button" className="btn-link" onClick={selection.selectAll}>Select all {filteredSources.length}</button>
+                )}
+              </p>
+            )}
+            <div className="bulk-bar-actions">
+              {bulkRun ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  disabled={bulkRun.stopping || bulkRun.done + 1 >= bulkRun.total}
+                  onClick={() => { bulkStopRef.current = true; setBulkRun((run) => run && { ...run, stopping: true }) }}
+                >
+                  <Square className="h-3 w-3" aria-hidden="true" /> Stop
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-xs"
+                    onClick={() => void bulkRefresh()}
+                    disabled={selectedRefreshable.length === 0}
+                    title={selectedRefreshable.length < selection.count ? 'Disabled sources in the selection are skipped' : 'Download and import every selected source now, one after another'}
+                  >
+                    <RefreshCw className="h-3 w-3" aria-hidden="true" /> Download &amp; import ({selectedRefreshable.length})
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-xs"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    aria-keyshortcuts="Delete"
+                    title="Delete the selected sources with their channels and programmes (Delete)"
+                  >
+                    <Trash2 className="h-3 w-3" aria-hidden="true" /> Delete ({selection.count})
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-xs" onClick={selection.clear}>
+                    <X className="h-3 w-3" aria-hidden="true" /> Clear selection
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <LoadingState title="Loading sources" compact />
         ) : isError ? (
@@ -468,10 +615,24 @@ export function Sources() {
             <button type="button" className="btn btn-secondary" onClick={() => { setSourceSearch(''); setStatusFilter('all') }}>Clear filters</button>
           </EmptyState>
         ) : (
-          <div className="table-scroll">
-            <table className="data-table">
+          <div className="table-scroll" onKeyDown={bulkBusy ? undefined : selection.tableKeyDown(() => setBulkDeleteOpen(true))}>
+            <table className="data-table" aria-describedby="sources-selection-hint">
               <thead>
                 <tr>
+                  <th scope="col" className="cell-select">
+                    <input
+                      type="checkbox"
+                      className="checkbox"
+                      data-table-select-all
+                      ref={(element) => { if (element) element.indeterminate = selection.pageState === 'some' }}
+                      checked={selection.pageState === 'all'}
+                      onChange={selection.togglePage}
+                      disabled={bulkBusy}
+                      aria-label="Select all sources on this page"
+                      title="Select all on this page (Ctrl+A)"
+                      aria-keyshortcuts="Control+A Meta+A"
+                    />
+                  </th>
                   <th scope="col">Source</th>
                   <th scope="col">Status</th>
                   <th scope="col">Last import</th>
@@ -488,7 +649,19 @@ export function Sources() {
                   const toggling = activationMutation.isPending && activationMutation.variables?.source.id === source.id
                   const refreshing = refreshMutation.isPending && refreshMutation.variables?.id === source.id
                   return (
-                    <tr key={source.id}>
+                    <tr key={source.id} className={selection.isSelected(source.id) ? 'is-selected' : undefined}>
+                      <td className="cell-select">
+                        <input
+                          type="checkbox"
+                          className="checkbox"
+                          data-table-select-row
+                          checked={selection.isSelected(source.id)}
+                          onChange={() => undefined}
+                          onClick={(event) => selection.toggleRow(source.id, event.shiftKey)}
+                          disabled={bulkBusy}
+                          aria-label={`Select ${source.name}`}
+                        />
+                      </td>
                       <td className="min-w-[260px]">
                         <span className="table-text font-semibold">{source.name}</span>
                         {source.source_url && (
@@ -529,7 +702,7 @@ export function Sources() {
                             type="button"
                             className="icon-button"
                             onClick={() => refreshMutation.mutate(source)}
-                            disabled={refreshing}
+                            disabled={refreshing || bulkBusy}
                             aria-label={`Refresh ${source.name} now`}
                             title="Download and import now"
                           >
@@ -542,7 +715,7 @@ export function Sources() {
                             type="button"
                             className="icon-button is-danger"
                             onClick={() => setDeleteTarget(source)}
-                            disabled={deleteMutation.isPending}
+                            disabled={deleteMutation.isPending || bulkBusy}
                             aria-label={`Delete ${source.name}`}
                             title="Delete source with its channels and programmes"
                           >
@@ -555,10 +728,23 @@ export function Sources() {
                 })}
               </tbody>
             </table>
+            <p id="sources-selection-hint" className="sr-only">
+              Use the checkboxes to select sources for bulk actions. Shift+click selects a range, Ctrl+A selects the page, Delete deletes the selection.
+            </p>
           </div>
         )}
         {!isLoading && !isError && filteredSources.length > 0 && <Pagination {...paginationProps} itemLabel="sources" />}
       </section>
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={`Delete ${plural(selection.count, 'source')}?`}
+        description={`Deleting ${nameList(selectedSources)} also removes all of their channels and programmes and drops them from outputs. This cannot be undone.`}
+        confirmLabel={`Delete ${plural(selection.count, 'source')}`}
+        destructive
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void bulkDelete()}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}
