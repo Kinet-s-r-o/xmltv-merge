@@ -101,6 +101,9 @@ Docker stack application for aggregating XMLTV EPG data from multiple sources.
 | GET | /api/v1/sources/export | Download source configuration XML ([format](docs/source-config-format.md)) |
 | POST | /api/v1/sources/import/preview | Validate configuration XML and return the create/update/unchanged plan |
 | POST | /api/v1/sources/import | Apply configuration XML (never deletes sources) |
+| GET | /api/v1/outputs/export | Download output configuration XML without tokens ([format](docs/output-config-format.md)) |
+| POST | /api/v1/outputs/import/preview | Validate output configuration XML; plan with missing channels |
+| POST | /api/v1/outputs/import | Apply output configuration XML (never deletes outputs, keeps tokens) |
 | GET | /api/v1/channels | List channels (filter: source_id, search) |
 | GET | /api/v1/channels/:id | Channel detail |
 | GET | /api/v1/programmes | EPG query (filter: date, channel_id, source_id, page, limit) |

@@ -104,4 +104,5 @@ validation, plan; tested in `source_config_test.go`),
 `SourceRepository.ApplyConfigImport`, handlers `ExportSources`,
 `PreviewSourceImport`, `ImportSources`; UI in
 `frontend/src/pages/Sources.tsx` and
-`frontend/src/components/sources/SourceImportDialog.tsx`.
+`frontend/src/components/sources/SourceImportDialog.tsx`. Outputs use the
+same flow: see [`output-config-format.md`](output-config-format.md).

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -525,11 +526,53 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 func (h *Handler) ExportSources(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	body, _, err := h.importSvc.ExportSourceConfigs(r.Context(), now)
+	writeConfigDownload(w, "xmltv-sources", now, body, err)
+}
+
+// PreviewSourceImport validates an uploaded configuration file and returns the
+// planned create/update/unchanged actions without writing anything.
+func (h *Handler) PreviewSourceImport(w http.ResponseWriter, r *http.Request) {
+	h.configImport(w, r, service.MaxSourceConfigBytes, func(data []byte) (interface{}, error) {
+		return h.importSvc.ImportSourceConfigs(r.Context(), data, false)
+	})
+}
+
+// ImportSources validates an uploaded configuration file and applies it.
+func (h *Handler) ImportSources(w http.ResponseWriter, r *http.Request) {
+	h.configImport(w, r, service.MaxSourceConfigBytes, func(data []byte) (interface{}, error) {
+		return h.importSvc.ImportSourceConfigs(r.Context(), data, true)
+	})
+}
+
+// ExportOutputs downloads the output configuration (channel references and
+// field rules, never feed tokens) as a versioned XML file.
+func (h *Handler) ExportOutputs(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	body, err := h.epgSvc.ExportOutputConfigs(r.Context(), now)
+	writeConfigDownload(w, "xmltv-outputs", now, body, err)
+}
+
+// PreviewOutputImport validates an uploaded output configuration and returns
+// the planned actions and unresolved channels without writing anything.
+func (h *Handler) PreviewOutputImport(w http.ResponseWriter, r *http.Request) {
+	h.configImport(w, r, service.MaxOutputConfigBytes, func(data []byte) (interface{}, error) {
+		return h.epgSvc.ImportOutputConfigs(r.Context(), data, false)
+	})
+}
+
+// ImportOutputs validates an uploaded output configuration and applies it.
+func (h *Handler) ImportOutputs(w http.ResponseWriter, r *http.Request) {
+	h.configImport(w, r, service.MaxOutputConfigBytes, func(data []byte) (interface{}, error) {
+		return h.epgSvc.ImportOutputConfigs(r.Context(), data, true)
+	})
+}
+
+func writeConfigDownload(w http.ResponseWriter, prefix string, now time.Time, body []byte, err error) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	filename := "xmltv-sources-" + now.UTC().Format("20060102-150405") + ".xml"
+	filename := prefix + "-" + now.UTC().Format("20060102-150405") + ".xml"
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	w.Header().Set("Cache-Control", "no-store")
@@ -537,21 +580,12 @@ func (h *Handler) ExportSources(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-// PreviewSourceImport validates an uploaded configuration file and returns the
-// planned create/update/unchanged actions without writing anything.
-func (h *Handler) PreviewSourceImport(w http.ResponseWriter, r *http.Request) {
-	h.sourceImport(w, r, false)
-}
-
-// ImportSources validates an uploaded configuration file and applies it.
-func (h *Handler) ImportSources(w http.ResponseWriter, r *http.Request) {
-	h.sourceImport(w, r, true)
-}
-
-func (h *Handler) sourceImport(w http.ResponseWriter, r *http.Request, apply bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, service.MaxSourceConfigBytes+(64<<10))
-	if err := r.ParseMultipartForm(service.MaxSourceConfigBytes + (64 << 10)); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "upload a source configuration file of at most 1 MB", "details": []string{}})
+// configImport reads the multipart "file" field (at most limit bytes) and runs
+// run on it. Invalid files answer 422 with every problem in "details".
+func (h *Handler) configImport(w http.ResponseWriter, r *http.Request, limit int64, run func([]byte) (interface{}, error)) {
+	r.Body = http.MaxBytesReader(w, r.Body, limit+(64<<10))
+	if err := r.ParseMultipartForm(limit + (64 << 10)); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": fmt.Sprintf("upload a configuration file of at most %d MB", limit>>20), "details": []string{}})
 		return
 	}
 	file, _, err := r.FormFile("file")
@@ -561,16 +595,16 @@ func (h *Handler) sourceImport(w http.ResponseWriter, r *http.Request, apply boo
 	}
 	defer file.Close()
 
-	data, err := service.ReadSourceConfigFile(file)
+	data, err := service.ReadConfigFile(file, limit)
 	if err == nil {
-		var plan *service.SourceImportPlan
-		plan, err = h.importSvc.ImportSourceConfigs(r.Context(), data, apply)
+		var plan interface{}
+		plan, err = run(data)
 		if err == nil {
 			writeJSON(w, http.StatusOK, plan)
 			return
 		}
 	}
-	if cfgErr, ok := service.IsSourceConfigError(err); ok {
+	if cfgErr, ok := service.IsConfigFileError(err); ok {
 		details := cfgErr.Details
 		if details == nil {
 			details = []string{}

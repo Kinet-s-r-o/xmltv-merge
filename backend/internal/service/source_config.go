@@ -1,12 +1,9 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"encoding/xml"
-	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"strconv"
 	"strings"
@@ -49,20 +46,6 @@ type SourceConfig struct {
 	Enabled              bool
 	RefreshIntervalHours int
 	HistoryDays          int
-}
-
-// SourceConfigError reports why a configuration file cannot be imported.
-// Details lists every problem found, one line each.
-type SourceConfigError struct {
-	Message string
-	Details []string
-}
-
-func (e *SourceConfigError) Error() string {
-	if len(e.Details) == 0 {
-		return e.Message
-	}
-	return e.Message + ": " + strings.Join(e.Details, "; ")
 }
 
 type sourceConfigFileXML struct {
@@ -124,41 +107,17 @@ func SourceToConfig(s models.Source) SourceConfig {
 }
 
 // ParseSourceConfigs decodes and validates a configuration file. It returns a
-// *SourceConfigError describing every problem when the file cannot be imported.
+// *ConfigFileError describing every problem when the file cannot be imported.
 func ParseSourceConfigs(data []byte) ([]SourceConfig, error) {
-	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
-	if len(bytes.TrimSpace(data)) == 0 {
-		return nil, &SourceConfigError{Message: "the file is empty"}
-	}
-
-	var root struct{ XMLName xml.Name }
-	if err := xml.Unmarshal(data, &root); err != nil {
-		detail := err.Error()
-		if errors.Is(err, io.EOF) {
-			detail = "no XML element found"
-		}
-		return nil, &SourceConfigError{Message: "the file is not well-formed XML", Details: []string{detail}}
-	}
-	if root.XMLName.Local != SourceConfigRoot {
-		return nil, &SourceConfigError{Message: fmt.Sprintf("root element must be <%s>, found <%s>", SourceConfigRoot, root.XMLName.Local)}
-	}
-
 	var file sourceConfigFileXML
-	if err := xml.Unmarshal(data, &file); err != nil {
-		return nil, &SourceConfigError{Message: "the file is not a valid source configuration", Details: []string{err.Error()}}
-	}
-	version := strings.TrimSpace(file.Version)
-	if version == "" {
-		return nil, &SourceConfigError{Message: fmt.Sprintf("<%s> is missing the version attribute (expected version=\"%s\")", SourceConfigRoot, SourceConfigVersion)}
-	}
-	if version != SourceConfigVersion {
-		return nil, &SourceConfigError{Message: fmt.Sprintf("unsupported file version %q (supported: %s)", version, SourceConfigVersion)}
+	if err := decodeConfigFile(data, SourceConfigRoot, SourceConfigVersion, &file, func() string { return file.Version }); err != nil {
+		return nil, err
 	}
 	if len(file.Sources) == 0 {
-		return nil, &SourceConfigError{Message: "the file contains no <source> entries"}
+		return nil, &ConfigFileError{Message: "the file contains no <source> entries"}
 	}
 	if len(file.Sources) > MaxSourceConfigEntries {
-		return nil, &SourceConfigError{Message: fmt.Sprintf("the file contains %d sources; at most %d are allowed", len(file.Sources), MaxSourceConfigEntries)}
+		return nil, &ConfigFileError{Message: fmt.Sprintf("the file contains %d sources; at most %d are allowed", len(file.Sources), MaxSourceConfigEntries)}
 	}
 
 	configs := make([]SourceConfig, 0, len(file.Sources))
@@ -193,16 +152,9 @@ func ParseSourceConfigs(data []byte) ([]SourceConfig, error) {
 			problems = append(problems, err.Error())
 		}
 
-		enabled := true
-		if entry.Enabled != nil {
-			switch strings.ToLower(strings.TrimSpace(*entry.Enabled)) {
-			case "true", "1":
-				enabled = true
-			case "false", "0":
-				enabled = false
-			default:
-				problems = append(problems, fmt.Sprintf("enabled attribute must be true or false, got %q", *entry.Enabled))
-			}
+		enabled, ok := parseConfigBool(entry.Enabled, true)
+		if !ok {
+			problems = append(problems, fmt.Sprintf("enabled attribute must be true or false, got %q", *entry.Enabled))
 		}
 
 		interval, problem := parseBoundedInt(entry.RefreshIntervalHours, "refresh-interval-hours", MinRefreshHours, MaxRefreshHours, "hours")
@@ -222,16 +174,9 @@ func ParseSourceConfigs(data []byte) ([]SourceConfig, error) {
 		}
 	}
 	if len(details) > 0 {
-		return nil, &SourceConfigError{Message: fmt.Sprintf("%d problem(s) found; nothing was imported", len(details)), Details: details}
+		return nil, &ConfigFileError{Message: fmt.Sprintf("%d problem(s) found; nothing was imported", len(details)), Details: details}
 	}
 	return configs, nil
-}
-
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 func parseBoundedInt(raw *string, element string, min, max int, unit string) (int, string) {
@@ -362,18 +307,6 @@ func (s *ImportService) ExportSourceConfigs(ctx context.Context, now time.Time) 
 	return body, len(configs), err
 }
 
-// ReadSourceConfigFile reads at most MaxSourceConfigBytes from r.
-func ReadSourceConfigFile(r io.Reader) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(r, MaxSourceConfigBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > MaxSourceConfigBytes {
-		return nil, &SourceConfigError{Message: "the file exceeds the 1 MB limit for source configurations"}
-	}
-	return data, nil
-}
-
 // ImportSourceConfigs validates a configuration file and returns the plan. When
 // apply is true, the plan is written in one transaction; nothing is deleted.
 func (s *ImportService) ImportSourceConfigs(ctx context.Context, data []byte, apply bool) (*SourceImportPlan, error) {
@@ -394,13 +327,6 @@ func (s *ImportService) ImportSourceConfigs(ctx context.Context, data []byte, ap
 	}
 	plan.Applied = true
 	return &plan, nil
-}
-
-// IsSourceConfigError reports whether err is a validation problem with the file.
-func IsSourceConfigError(err error) (*SourceConfigError, bool) {
-	var cfgErr *SourceConfigError
-	ok := errors.As(err, &cfgErr)
-	return cfgErr, ok
 }
 
 func toRepoItems(items []SourceImportItem) []repository.ConfigImportItem {

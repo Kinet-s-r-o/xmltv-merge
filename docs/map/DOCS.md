@@ -9,4 +9,5 @@
 | What is the database schema? | [`../../backend/internal/database/migrations/001_init.sql`](../../backend/internal/database/migrations/001_init.sql) and later migrations | Current truth is the ordered migration set, not only `PLAN.md`. |
 | What is the public feed contract? | [`../../backend/internal/handler/handler.go`](../../backend/internal/handler/handler.go) and [`../../frontend/src/pages/Outputs.tsx`](../../frontend/src/pages/Outputs.tsx) | Backend serializes XMLTV; UI exposes the copyable tokenized URL. |
 | What is the source configuration export/import format? | [`../source-config-format.md`](../source-config-format.md) | Versioned XML schema, endpoints and matching rules. |
+| What is the output configuration export/import format? | [`../output-config-format.md`](../output-config-format.md) | Portable channel references, no tokens, missing-channel reporting. |
 | What visual rules apply to UI work? | [`../../design-system/xmltv-epg/MASTER.md`](../../design-system/xmltv-epg/MASTER.md) | Project-wide visual source of truth; route-specific exceptions are under its `pages/` directory. |

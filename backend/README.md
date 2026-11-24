@@ -12,15 +12,17 @@
 | `internal/repository/source_repo.go` | Source CRUD, due selection, activation, import status and transactional configuration import (never deletes). | Scheduler and import service when changing lifecycle behavior. |
 | `internal/repository/channel_repo.go` | Channel upsert, list/search and lookup. | Import service and output editor contracts. |
 | `internal/repository/programme_repo.go` | Programme upsert/list/detail and history cleanup. | Import service, EPG API and retention behavior. |
-| `internal/repository/output_repo.go` | Output slug/token generation, channel rules and transactional saves. | Feed handlers and output editor. |
+| `internal/repository/output_repo.go` | Output slug/token generation, channel rules, transactional saves, and configuration export/import (`ListConfigs`, `ChannelIDsByRef`, `ApplyConfigImport`; never deletes, keeps tokens). | Feed handlers and output editor. |
+| `internal/service/config_file.go` | Shared helpers for versioned XML configuration files: `ConfigFileError` (422 details), size-limited read, root/version check, bool parsing. | Both `source_config.go` and `output_config.go`. |
+| `internal/service/output_config.go` | Versioned XML output configuration: export (no tokens), parse/validate, portable channel references (source name + XMLTV id), import plan with missing channels, apply. Tested in `output_config_test.go`. | `../docs/output-config-format.md`, `OutputRepository.ApplyConfigImport`. |
 | `internal/service/source_config.go` | Versioned XML source configuration: export, parse/validate, import plan (create/update/unchanged) and apply. Tested in `source_config_test.go`. | `../docs/source-config-format.md`, `SourceRepository.ApplyConfigImport`. |
 | `internal/service/import_service.go` | File/URL import orchestration and validation. | Parser, source/channel/programme repositories and scheduler. |
 | `internal/service/epg_service.go` | Thin application service over read/write repositories. | Handler contracts and repository changes. |
 | `internal/service/scheduler.go` | Due source imports and hourly programme retention cleanup. | Source enabled/interval/history semantics. |
-| `internal/handler/handler.go` | HTTP handlers, JSON contracts, XMLTV feed serialization and source configuration export/import (`/api/v1/sources/export`, `/import/preview`, `/import`). | `cmd/server/main.go` route registration and frontend API client. |
+| `internal/handler/handler.go` | HTTP handlers, JSON contracts, XMLTV feed serialization and source/output configuration export/import (`/api/v1/{sources,outputs}/export`, `/import/preview`, `/import`) via the shared `configImport` helper. | `cmd/server/main.go` route registration and frontend API client. |
 
 ## Checks
 
-Run `go test ./...` from `backend/`. Unit tests currently cover the source
-configuration XML parse/validation/plan (`internal/service`); other packages
+Run `go test ./...` from `backend/`. Unit tests currently cover the source and
+output configuration XML parse/validation/plan (`internal/service`); other packages
 are compile-checked only.

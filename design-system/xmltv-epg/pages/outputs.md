@@ -15,5 +15,9 @@ Classes live in `frontend/src/index.css` §18.
 - **Feed URL** is a read-only mono input with a Copy button and a hint that the
   URL contains the access token. Never print the token elsewhere on the page or
   in notices.
+- **Import / Export** in the page header follow the master "File imports"
+  rule. Import is disabled while the open output has unsaved changes, so an
+  import never silently replaces a draft; after an import the open output is
+  reloaded if it was updated.
 - **Unsaved state** is shown as text and badge ("Unsaved" warning / "Saved"
   success) in the Feed settings header; Save is disabled when nothing changed.

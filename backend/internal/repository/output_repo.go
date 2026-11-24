@@ -127,3 +127,147 @@ func (r *OutputRepository) SaveChannels(ctx context.Context, outputID int, chann
 	}
 	return tx.Commit(ctx)
 }
+
+// OutputSlug returns the public feed slug derived from an output name.
+func OutputSlug(name string) string { return outputSlug(name) }
+
+// OutputChannelRecord is a channel rule with the portable channel reference
+// (source name + XMLTV external channel id) used by configuration export.
+type OutputChannelRecord struct {
+	models.OutputChannel
+	SourceName string
+	ExternalID string
+}
+
+// OutputConfigRecord is an output with its ordered channel rules.
+type OutputConfigRecord struct {
+	ID       int
+	Name     string
+	Slug     string
+	Channels []OutputChannelRecord
+}
+
+// ListConfigs returns every output with its channel rules in editor order.
+func (r *OutputRepository) ListConfigs(ctx context.Context) ([]OutputConfigRecord, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, name, slug FROM outputs ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]OutputConfigRecord, 0)
+	index := map[int]int{}
+	for rows.Next() {
+		var o OutputConfigRecord
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		o.Channels = make([]OutputChannelRecord, 0)
+		index[o.ID] = len(result)
+		result = append(result, o)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	rows, err = r.db.Query(ctx, `SELECT oc.output_id, oc.channel_id, oc.display_name, oc.include_title, oc.include_subtitle, oc.include_description,
+		oc.include_credits, oc.include_categories, oc.include_country, oc.include_year, oc.include_episode_num, oc.include_icon,
+		s.name, c.external_id
+		FROM output_channels oc JOIN channels c ON c.id = oc.channel_id JOIN sources s ON s.id = c.source_id
+		ORDER BY oc.output_id, oc.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rec OutputChannelRecord
+		if err := rows.Scan(&rec.OutputID, &rec.ChannelID, &rec.DisplayName, &rec.IncludeTitle, &rec.IncludeSubtitle, &rec.IncludeDescription,
+			&rec.IncludeCredits, &rec.IncludeCategories, &rec.IncludeCountry, &rec.IncludeYear, &rec.IncludeEpisodeNum, &rec.IncludeIcon,
+			&rec.SourceName, &rec.ExternalID); err != nil {
+			return nil, err
+		}
+		if i, ok := index[rec.OutputID]; ok {
+			result[i].Channels = append(result[i].Channels, rec)
+		}
+	}
+	return result, rows.Err()
+}
+
+// ChannelRef identifies a channel portably: source name (lower-cased) + XMLTV id.
+type ChannelRef struct {
+	Source     string
+	ExternalID string
+}
+
+// ChannelIDsByRef maps every stored channel to its database id.
+func (r *OutputRepository) ChannelIDsByRef(ctx context.Context) (map[ChannelRef]int, error) {
+	rows, err := r.db.Query(ctx, `SELECT c.id, s.name, c.external_id FROM channels c JOIN sources s ON s.id = c.source_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := map[ChannelRef]int{}
+	for rows.Next() {
+		var id int
+		var source, externalID string
+		if err := rows.Scan(&id, &source, &externalID); err != nil {
+			return nil, err
+		}
+		result[ChannelRef{Source: strings.ToLower(strings.TrimSpace(source)), ExternalID: externalID}] = id
+	}
+	return result, rows.Err()
+}
+
+// OutputImportWrite is one planned change of an output configuration import.
+// ExistingID 0 creates a new output with a fresh token; otherwise the output is
+// renamed (when Rename is set) and/or its channel rules are replaced.
+type OutputImportWrite struct {
+	ExistingID      int
+	Name            string
+	Rename          bool
+	ReplaceChannels bool
+	Channels        []models.OutputChannel
+}
+
+// ApplyConfigImport creates and updates outputs in one transaction. Outputs are
+// never deleted and existing feed tokens are kept.
+func (r *OutputRepository) ApplyConfigImport(ctx context.Context, writes []OutputImportWrite) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, w := range writes {
+		id := w.ExistingID
+		if id == 0 {
+			tokenBytes := make([]byte, 24)
+			if _, err := rand.Read(tokenBytes); err != nil {
+				return err
+			}
+			if err := tx.QueryRow(ctx, `INSERT INTO outputs(name,slug,public_token) VALUES($1,$2,$3) RETURNING id`,
+				w.Name, outputSlug(w.Name), fmt.Sprintf("%x", tokenBytes)).Scan(&id); err != nil {
+				return fmt.Errorf("create output %q: %w", w.Name, err)
+			}
+		} else if w.Rename {
+			if _, err := tx.Exec(ctx, `UPDATE outputs SET name=$2, slug=$3, updated_at=now() WHERE id=$1`, id, w.Name, outputSlug(w.Name)); err != nil {
+				return fmt.Errorf("rename output %q: %w", w.Name, err)
+			}
+		}
+		if w.ExistingID == 0 || w.ReplaceChannels {
+			if _, err := tx.Exec(ctx, `DELETE FROM output_channels WHERE output_id=$1`, id); err != nil {
+				return err
+			}
+			for _, c := range w.Channels {
+				if _, err := tx.Exec(ctx, `INSERT INTO output_channels(output_id,channel_id,display_name,include_title,include_subtitle,include_description,include_credits,include_categories,include_country,include_year,include_episode_num,include_icon) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+					id, c.ChannelID, c.DisplayName, c.IncludeTitle, c.IncludeSubtitle, c.IncludeDescription, c.IncludeCredits, c.IncludeCategories, c.IncludeCountry, c.IncludeYear, c.IncludeEpisodeNum, c.IncludeIcon); err != nil {
+					return fmt.Errorf("save channel rules of output %q: %w", w.Name, err)
+				}
+			}
+			if _, err := tx.Exec(ctx, `UPDATE outputs SET updated_at=now() WHERE id=$1`, id); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit(ctx)
+}

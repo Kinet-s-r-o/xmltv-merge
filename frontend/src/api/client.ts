@@ -100,7 +100,9 @@ export interface CreateSourceInput {
   history_days: number
 }
 
-export type SourceImportAction = 'create' | 'update' | 'unchanged'
+/** Result of a configuration import row (sources and outputs share the vocabulary). */
+export type ConfigImportAction = 'create' | 'update' | 'unchanged'
+export type SourceImportAction = ConfigImportAction
 
 export interface SourceImportItem {
   name: string
@@ -135,14 +137,44 @@ async function failure(res: Response): Promise<ApiError> {
   return new ApiError(err.error || `HTTP ${res.status}`, Array.isArray(err.details) ? err.details : [])
 }
 
-function uploadSourceConfig(path: string, file: File) {
+export interface OutputImportItem {
+  name: string
+  slug: string
+  action: ConfigImportAction
+  existing_id?: number
+  changes: string[]
+  channel_count: number
+  channels_added: number
+  channels_removed: number
+  channels_changed: number
+  missing_channels: Array<{ source: string; id: string }>
+}
+
+export interface OutputImportPlan {
+  version: string
+  items: OutputImportItem[]
+  summary: { create: number; update: number; unchanged: number; missing_channels: number }
+  applied: boolean
+}
+
+/** Uploads a configuration file (multipart field "file") and returns the import plan. */
+function uploadConfig<P extends { items: unknown[] }>(path: string, file: File): Promise<P> {
   const formData = new FormData()
   formData.append('file', file)
   return fetch(`${API_BASE}${path}`, { method: 'POST', body: formData }).then(async (res) => {
     if (!res.ok) throw await failure(res)
-    const plan = (await res.json()) as SourceImportPlan
+    const plan = (await res.json()) as P
     return { ...plan, items: plan.items ?? [] }
   })
+}
+
+/** Downloads a configuration export; resolves to the file name and contents. */
+async function downloadConfig(path: string, fallbackName: string) {
+  const res = await fetch(`${API_BASE}${path}`)
+  if (!res.ok) throw await failure(res)
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName
+  return { filename, blob: await res.blob() }
 }
 
 export interface Paginated<T> {
@@ -212,18 +244,9 @@ export const api = {
       body: JSON.stringify(source),
     }),
 
-  /** Downloads the source configuration as XML; resolves to the file name and contents. */
-  exportSources: async () => {
-    const res = await fetch(`${API_BASE}/sources/export`)
-    if (!res.ok) throw await failure(res)
-    const disposition = res.headers.get('Content-Disposition') ?? ''
-    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'xmltv-sources.xml'
-    return { filename, blob: await res.blob() }
-  },
-
-  previewSourceImport: (file: File) => uploadSourceConfig('/sources/import/preview', file),
-
-  importSources: (file: File) => uploadSourceConfig('/sources/import', file),
+  exportSources: () => downloadConfig('/sources/export', 'xmltv-sources.xml'),
+  previewSourceImport: (file: File) => uploadConfig<SourceImportPlan>('/sources/import/preview', file),
+  importSources: (file: File) => uploadConfig<SourceImportPlan>('/sources/import', file),
 
   deleteSource: (id: number) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
 
@@ -248,6 +271,9 @@ export const api = {
   addOutput: (name: string) => request<{ id: number }>('/outputs', { method: 'POST', body: JSON.stringify({ name }) }),
   updateOutput: (id: number, output: { name: string; channels: OutputChannel[] }) => request<void>(`/outputs/${id}`, { method: 'PUT', body: JSON.stringify(output) }),
   deleteOutput: (id: number) => request<void>(`/outputs/${id}`, { method: 'DELETE' }),
+  exportOutputs: () => downloadConfig('/outputs/export', 'xmltv-outputs.xml'),
+  previewOutputImport: (file: File) => uploadConfig<OutputImportPlan>('/outputs/import/preview', file),
+  importOutputs: (file: File) => uploadConfig<OutputImportPlan>('/outputs/import', file),
 
   channel: (id: number) => request<Channel>(`/channels/${id}`),
 

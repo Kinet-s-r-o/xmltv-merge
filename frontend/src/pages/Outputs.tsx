@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clipboard, Download, Layers3, ListVideo, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { Clipboard, Download, FileDown, FileUp, Layers3, ListVideo, Plus, Save, Search, Trash2, X } from 'lucide-react'
 import { api, Channel, OutputChannel } from '../api/client'
+import { OutputImportDialog } from '../components/outputs/OutputImportDialog'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { useFeedback } from '../components/ui/Feedback'
 import { PageHeader } from '../components/ui/PageHeader'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
+import { useConfigTransfer } from '../lib/configTransfer'
 
 const defaultItems = (): Omit<OutputChannel, 'channel_id' | 'display_name'> => ({
   include_title: true, include_subtitle: true, include_description: true, include_credits: true,
@@ -109,6 +111,28 @@ export function Outputs() {
   const applyPreset = (preset: 'full' | 'minimal') => setDraftChannels((current) => current.map((item) => ({ ...item, ...(preset === 'full' ? defaultItems() : minimalItems()) })))
   const isDirty = Boolean(selected) && outputSnapshot(draftName, draftChannels) !== savedSnapshot
 
+  const transfer = useConfigTransfer({
+    exportFile: api.exportOutputs,
+    preview: api.previewOutputImport,
+    apply: api.importOutputs,
+    onExported: (filename) => notify({
+      tone: 'success',
+      title: 'Outputs exported',
+      message: `${filename} contains ${outputs.length} output${outputs.length === 1 ? '' : 's'} with their channels and field rules; feed tokens are not included.`,
+    }),
+    onExportError: (err) => notify({ tone: 'error', title: 'Could not export outputs', message: err.message }),
+    onImported: async (plan) => {
+      const { create, update, unchanged, missing_channels: missing } = plan.summary
+      notify({
+        tone: missing > 0 ? 'info' : 'success',
+        title: 'Outputs imported',
+        message: `${create} new, ${update} updated, ${unchanged} unchanged.${missing > 0 ? ` ${missing} channel${missing === 1 ? ' was' : 's were'} not found and left out.` : ''} New outputs have new feed URLs.`,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['outputs'] })
+      if (selectedId !== null && plan.items.some((item) => item.existing_id === selectedId && item.action === 'update')) openOutput(selectedId)
+    },
+  })
+
   const copyFeedUrl = async () => {
     try {
       await navigator.clipboard.writeText(publicFeedUrl)
@@ -125,10 +149,38 @@ export function Outputs() {
         title="Outputs"
         description="Aggregated XMLTV feeds built from channels of any source. Each feed has a token-protected public URL for customers."
       >
+        <input {...transfer.inputProps} />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={transfer.openPicker}
+          disabled={transfer.state.status !== 'closed' || isDirty}
+          title={isDirty ? 'Save or discard the changes to the open output before importing' : 'Add or update outputs from an XML configuration file'}
+        >
+          <FileUp className="h-3.5 w-3.5" aria-hidden="true" /> Import
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={transfer.exportNow}
+          disabled={transfer.exporting || outputs.length === 0}
+          title="Download every output's channels and field rules as XML (without feed tokens)"
+        >
+          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <FileDown className="h-3.5 w-3.5" aria-hidden="true" />}
+          {transfer.exporting ? 'Exporting…' : 'Export'}
+        </button>
         <button type="button" className="btn btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
           {createMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />} Add output
         </button>
       </PageHeader>
+
+      <OutputImportDialog
+        state={transfer.state}
+        applying={transfer.applying}
+        applyError={transfer.applyError}
+        onClose={transfer.close}
+        onConfirm={transfer.confirm}
+      />
 
       {isLoading ? (
         <section className="data-panel"><LoadingState title="Loading outputs" /></section>

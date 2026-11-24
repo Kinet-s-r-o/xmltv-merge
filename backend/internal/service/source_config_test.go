@@ -8,14 +8,14 @@ import (
 	"xmltv-merge/internal/models"
 )
 
-func mustConfigError(t *testing.T, err error) *SourceConfigError {
+func mustConfigError(t *testing.T, err error) *ConfigFileError {
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
-	cfgErr, ok := IsSourceConfigError(err)
+	cfgErr, ok := IsConfigFileError(err)
 	if !ok {
-		t.Fatalf("expected *SourceConfigError, got %T: %v", err, err)
+		t.Fatalf("expected *ConfigFileError, got %T: %v", err, err)
 	}
 	return cfgErr
 }
