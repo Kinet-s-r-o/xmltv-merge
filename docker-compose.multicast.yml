@@ -1,0 +1,34 @@
+# Optional override that lets the backend send DVB EIT multicast streams.
+#
+# The default bridge network does not forward multicast to the physical LAN,
+# so the backend gets a second interface on a macvlan network attached to the
+# host NIC (or VLAN sub-interface) that reaches the DVB-C modulator.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.multicast.yml up -d --build
+#
+# Required variables (set them in .env, see .env.example):
+#   MULTICAST_PARENT_IF   host interface, e.g. eth1 or eth0.300
+#   MULTICAST_SUBNET      subnet of that network, e.g. 192.0.2.0/24
+#   MULTICAST_GATEWAY     gateway of that network
+#   MULTICAST_IPV4        static address of the backend on that network
+services:
+  backend:
+    environment:
+      MULTICAST_ENABLED: "true"
+      # Select the outgoing interface by its macvlan address (robust against
+      # eth0/eth1 ordering inside the container).
+      MULTICAST_INTERFACE: ${MULTICAST_INTERFACE:-${MULTICAST_IPV4}}
+    networks:
+      default:
+      catv:
+        ipv4_address: ${MULTICAST_IPV4:?set MULTICAST_IPV4}
+
+networks:
+  catv:
+    driver: macvlan
+    driver_opts:
+      parent: ${MULTICAST_PARENT_IF:?set MULTICAST_PARENT_IF}
+    ipam:
+      config:
+        - subnet: ${MULTICAST_SUBNET:?set MULTICAST_SUBNET}
+          gateway: ${MULTICAST_GATEWAY:?set MULTICAST_GATEWAY}

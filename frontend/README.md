@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | `index.html` | HTML shell and pre-paint theme script (`data-theme` on `<html>`). | Theme storage key in `src/lib/theme.ts`. |
 | `src/main.tsx` | React root, IBM Plex font imports, TanStack Query client, Feedback provider and router. | Query defaults and global bootstrapping. |
-| `src/router.tsx` | Browser routes for dashboard, EPG, channels, programme detail, sources and outputs. | Add a route here and update navigation if needed. |
+| `src/router.tsx` | Browser routes for dashboard, EPG, channels, programme detail, sources, outputs and multicast outputs. | Add a route here and update navigation if needed. |
 | `src/api/client.ts` | Fetch wrapper, TypeScript API models and all backend calls. | Keep JSON fields and empty-array handling aligned with Go. |
 | `src/components/layout/Layout.tsx` | Kinet app shell: grouped sidebar (collapsible rail, mobile drawer), topbar with API service pill and theme switch. | Global navigation and layout behavior. |
 | `src/components/ui/` | Shared Kinet components: `Dialog`, `ConfirmDialog`, `Feedback` (notice stack, `useFeedback`), `PageHeader`, `ResourceState` (loading/empty/error), `Pagination`, `AppErrorBoundary`, `ImportPreviewDialog` (generic configuration import preview/confirm). | Dialog a11y contract and copy rules in the design master. |
@@ -19,6 +19,8 @@
 | `src/components/channels/StationScheduleDialog.tsx` | One station's schedule: days as rows, 24 h horizontally, opens at the current time. | `../design-system/xmltv-epg/pages/channels.md`; programmes query (`channel_id`, `limit`). |
 | `src/pages/ProgrammeDetail.tsx` | Full programme metadata, credits and categories. | Programme detail response shape. |
 | `src/pages/Sources.tsx` | URL source CRUD (add/edit in a modal with unsaved-changes guard), refresh, activation, search, paging, import status UI, XML configuration Import/Export and bulk delete / download & import of selected sources. | Source lifecycle API and disabled-source behavior. |
+| `src/pages/MulticastOutputs.tsx` | Multicast DVB EIT outputs: list with live stream state (5 s polling), on/off switch, TS dump download, bulk delete and XML Import/Export. | `../design-system/xmltv-epg/pages/multicast.md`; `/api/v1/multicast-outputs`. |
+| `src/components/multicast/` | `MulticastOutputDialog` (tabbed create/edit: stream settings + editable station table with filters, add/relink, filtered bulk set, now/next preview) and `MulticastImportDialog`. | `../docs/multicast-config-format.md`. |
 | `src/pages/Outputs.tsx` | Configurable output editor, channel search/source labels, field toggles, public URL and XML configuration Import/Export (Import is disabled while the open output has unsaved changes). | Output/channel serialization contract. |
 | `src/index.css` | Kinet tokens (dark/light), `@theme inline` semantic utilities, base reset and all component classes, including EPG timeline and output editor. | Global visual behavior; no raw hex or palette-shade utilities. |
 | `../design-system/xmltv-epg/MASTER.md` | Project-wide visual source of truth. | Read before UI changes; page overrides are under its `pages/` directory. |

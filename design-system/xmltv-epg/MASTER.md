@@ -107,7 +107,8 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
 ## Layout
 
 - Shell: fixed 256px sidebar (≥1024px) with brand mark, grouped navigation
-  ("Monitor": Dashboard, EPG grid, Channels; "Configure": Sources, Outputs),
+  ("Monitor": Dashboard, EPG grid, Channels; "Configure": Sources, Outputs,
+  Multicast outputs),
   footer meta and a persisted collapse toggle (64px icon rail). Below 1024px
   the sidebar is an off-canvas drawer with scrim; Escape closes it and returns
   focus to the menu button; a closed drawer is `visibility: hidden`.

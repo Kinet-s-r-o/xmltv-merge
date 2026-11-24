@@ -18,14 +18,18 @@ import (
 )
 
 type Handler struct {
-	importSvc *service.ImportService
-	epgSvc    *service.EPGService
+	importSvc    *service.ImportService
+	epgSvc       *service.EPGService
+	multicastSvc *service.MulticastService
+	multicastMgr *service.MulticastManager
 }
 
-func NewHandler(importSvc *service.ImportService, epgSvc *service.EPGService) *Handler {
+func NewHandler(importSvc *service.ImportService, epgSvc *service.EPGService, multicastSvc *service.MulticastService, multicastMgr *service.MulticastManager) *Handler {
 	return &Handler{
-		importSvc: importSvc,
-		epgSvc:    epgSvc,
+		importSvc:    importSvc,
+		epgSvc:       epgSvc,
+		multicastSvc: multicastSvc,
+		multicastMgr: multicastMgr,
 	}
 }
 

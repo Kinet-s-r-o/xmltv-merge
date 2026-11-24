@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useLocation, matchPath } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, Database, Layers3, LayoutDashboard, ListVideo, Menu, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Sun, Tv, Wifi, WifiOff, X, type LucideIcon } from 'lucide-react'
+import { ChevronRight, Database, Layers3, LayoutDashboard, ListVideo, Menu, Monitor, Moon, PanelLeftClose, PanelLeftOpen, RadioTower, Sun, Tv, Wifi, WifiOff, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { applyTheme, nextTheme, readThemePreference, type ThemePreference } from '../../lib/theme'
@@ -25,6 +25,7 @@ const navGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { to: '/sources', icon: Database, label: 'Sources' },
       { to: '/outputs', icon: Layers3, label: 'Outputs' },
+      { to: '/multicast', icon: RadioTower, label: 'Multicast outputs' },
     ],
   },
 ]
@@ -36,6 +37,7 @@ const sectionTitles: Array<[string, string]> = [
   ['/programmes/:id', 'Programme detail'],
   ['/sources', 'Sources'],
   ['/outputs', 'Outputs'],
+  ['/multicast', 'Multicast outputs'],
 ]
 
 const themeMeta: Record<ThemePreference, { icon: LucideIcon; label: string }> = {

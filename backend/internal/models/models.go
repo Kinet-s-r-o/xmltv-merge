@@ -101,3 +101,66 @@ type Output struct {
 	ChannelCount int             `json:"channel_count"`
 	Channels     []OutputChannel `json:"channels,omitempty"`
 }
+
+// MulticastOutput is a DVB EIT stream sent to a UDP multicast group.
+type MulticastOutput struct {
+	ID                    int                `json:"id"`
+	Name                  string             `json:"name"`
+	Description           string             `json:"description"`
+	MulticastAddress      string             `json:"multicast_address"`
+	MulticastPort         int                `json:"multicast_port"`
+	PID                   int                `json:"pid"`
+	ChunkSeconds          int                `json:"chunk_seconds"`
+	Timezone              string             `json:"timezone"`
+	DaysAhead             int                `json:"days_ahead"`
+	TextEncoding          string             `json:"text_encoding"`
+	LanguageCode          string             `json:"language_code"`
+	TableMode             string             `json:"table_mode"`
+	HomeTransportStreamID *int               `json:"home_transport_stream_id"`
+	IncludeTDTTOT         bool               `json:"include_tdt_tot"`
+	TTL                   int                `json:"ttl"`
+	Interface             string             `json:"interface"`
+	Enabled               bool               `json:"enabled"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	ServiceCount          int                `json:"service_count"`
+	Services              []MulticastService `json:"services,omitempty"`
+	Status                *MulticastStatus   `json:"status,omitempty"`
+}
+
+// MulticastService maps an imported channel to a DVB service of an output.
+// ChannelID is nil when the channel was deleted; SourceName and ExternalID
+// keep the reference so the service can be relinked.
+type MulticastService struct {
+	ID                int      `json:"id"`
+	OutputID          int      `json:"output_id"`
+	ChannelID         *int     `json:"channel_id"`
+	SourceName        string   `json:"source_name"`
+	ExternalID        string   `json:"external_id"`
+	DisplayName       string   `json:"display_name"`
+	Frequency         *int     `json:"frequency"`
+	TransportStreamID int      `json:"transport_stream_id"`
+	OriginalNetworkID int      `json:"original_network_id"`
+	ServiceID         int      `json:"service_id"`
+	Enabled           bool     `json:"enabled"`
+	Missing           bool     `json:"missing"`
+	Channel           *Channel `json:"channel,omitempty"`
+}
+
+// MulticastStatus is the live playout state of a multicast output.
+type MulticastStatus struct {
+	OutputID            int        `json:"output_id"`
+	State               string     `json:"state"`
+	LastError           string     `json:"last_error,omitempty"`
+	StartedAt           *time.Time `json:"started_at,omitempty"`
+	LastBuildAt         *time.Time `json:"last_build_at,omitempty"`
+	PacketsSent         uint64     `json:"packets_sent"`
+	BytesSent           uint64     `json:"bytes_sent"`
+	MeasuredKbps        float64    `json:"measured_kbps"`
+	ComputedKbps        float64    `json:"computed_kbps"`
+	CycleSeconds        int        `json:"cycle_seconds"`
+	Sections            int        `json:"sections"`
+	Events              int        `json:"events"`
+	TruncatedEvents     int        `json:"truncated_events"`
+	ServicesWithoutData []string   `json:"services_without_data"`
+}

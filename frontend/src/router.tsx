@@ -6,6 +6,7 @@ import { Channels } from './pages/Channels'
 import { ProgrammeDetail } from './pages/ProgrammeDetail'
 import { Sources } from './pages/Sources'
 import { Outputs } from './pages/Outputs'
+import { MulticastOutputs } from './pages/MulticastOutputs'
 
 export const router = createBrowserRouter([
   {
@@ -18,6 +19,7 @@ export const router = createBrowserRouter([
       { path: 'programmes/:id', element: <ProgrammeDetail /> },
       { path: 'sources', element: <Sources /> },
       { path: 'outputs', element: <Outputs /> },
+      { path: 'multicast', element: <MulticastOutputs /> },
     ],
   },
 ])

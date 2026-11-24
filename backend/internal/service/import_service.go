@@ -22,6 +22,8 @@ type ImportService struct {
 	sourceRepo  *repository.SourceRepository
 	channelRepo *repository.ChannelRepository
 	progRepo    *repository.ProgrammeRepository
+	// OnImported is called after a source import finished successfully.
+	OnImported func(sourceID int)
 }
 
 var ErrSourceDisabled = fmt.Errorf("source is disabled")
@@ -231,6 +233,9 @@ func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName 
 
 	// Update source import status
 	s.sourceRepo.UpdateImportStatus(ctx, sourceID, "success", "")
+	if s.OnImported != nil {
+		s.OnImported(sourceID)
+	}
 
 	duration := time.Since(start).Round(time.Millisecond).String()
 	return &ImportResult{

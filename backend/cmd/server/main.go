@@ -37,14 +37,29 @@ func main() {
 	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
 	defer stopScheduler()
 	go scheduler.Run(schedulerCtx)
-	h := handler.NewHandler(importSvc, epgSvc)
+
+	multicastSvc := service.NewMulticastService(pool)
+	multicastMgr := service.NewMulticastManager(multicastSvc, service.MulticastSettings{
+		Enabled:   cfg.MulticastEnabled,
+		Interface: cfg.MulticastInterface,
+		Loopback:  cfg.MulticastLoopback,
+	})
+	importSvc.OnImported = func(int) { multicastMgr.DataChanged() }
+	multicastCtx, stopMulticast := context.WithCancel(context.Background())
+	multicastDone := make(chan struct{})
+	go func() {
+		multicastMgr.Run(multicastCtx)
+		close(multicastDone)
+	}()
+
+	h := handler.NewHandler(importSvc, epgSvc, multicastSvc, multicastMgr)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -72,6 +87,18 @@ func main() {
 	r.Get("/feeds/{slug}.xml", h.PublicOutputXML)
 	r.Put("/api/v1/outputs/{id}", h.UpdateOutput)
 	r.Delete("/api/v1/outputs/{id}", h.DeleteOutput)
+	r.Get("/api/v1/multicast-outputs", h.ListMulticastOutputs)
+	r.Post("/api/v1/multicast-outputs", h.AddMulticastOutput)
+	r.Get("/api/v1/multicast-outputs/status", h.MulticastStatuses)
+	r.Get("/api/v1/multicast-outputs/export", h.ExportMulticastOutputs)
+	r.Post("/api/v1/multicast-outputs/import/preview", h.PreviewMulticastImport)
+	r.Post("/api/v1/multicast-outputs/import", h.ImportMulticastOutputs)
+	r.Get("/api/v1/multicast-outputs/{id}", h.GetMulticastOutput)
+	r.Put("/api/v1/multicast-outputs/{id}", h.UpdateMulticastOutput)
+	r.Delete("/api/v1/multicast-outputs/{id}", h.DeleteMulticastOutput)
+	r.Patch("/api/v1/multicast-outputs/{id}/activation", h.SetMulticastOutputEnabled)
+	r.Get("/api/v1/multicast-outputs/{id}/preview", h.PreviewMulticastOutput)
+	r.Get("/api/v1/multicast-outputs/{id}/dump.ts", h.DumpMulticastOutput)
 	r.Get("/api/v1/channels", h.ListChannels)
 	r.Get("/api/v1/channels/{id}", h.GetChannel)
 	r.Get("/api/v1/programmes", h.ListProgrammes)
@@ -99,6 +126,11 @@ func main() {
 
 	log.Println("shutting down...")
 	stopScheduler()
+	stopMulticast()
+	select {
+	case <-multicastDone:
+	case <-time.After(5 * time.Second):
+	}
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	srv.Shutdown(shutdownCtx)

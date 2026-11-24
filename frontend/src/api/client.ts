@@ -212,6 +212,120 @@ export interface Output {
   channels?: OutputChannel[]
 }
 
+export type MulticastTextEncoding = 'utf8' | 'iso8859-2' | 'iso6937'
+export type MulticastTableMode = 'actual' | 'actual_other'
+export type MulticastStreamState = 'stopped' | 'starting' | 'running' | 'error' | 'disabled_on_server'
+
+export interface MulticastService {
+  id?: number
+  output_id?: number
+  channel_id: number | null
+  source_name: string
+  external_id: string
+  display_name: string
+  frequency: number | null
+  transport_stream_id: number
+  original_network_id: number
+  service_id: number
+  enabled: boolean
+  missing?: boolean
+  channel?: Channel
+}
+
+export interface MulticastStatus {
+  output_id: number
+  state: MulticastStreamState
+  last_error?: string
+  started_at?: string
+  last_build_at?: string
+  packets_sent: number
+  bytes_sent: number
+  measured_kbps: number
+  computed_kbps: number
+  cycle_seconds: number
+  sections: number
+  events: number
+  truncated_events: number
+  services_without_data: string[]
+}
+
+export interface MulticastOutputInput {
+  name: string
+  description: string
+  multicast_address: string
+  multicast_port: number
+  pid: number
+  chunk_seconds: number
+  timezone: string
+  days_ahead: number
+  text_encoding: MulticastTextEncoding
+  language_code: string
+  table_mode: MulticastTableMode
+  home_transport_stream_id: number | null
+  include_tdt_tot: boolean
+  ttl: number
+  interface: string
+  enabled: boolean
+  services: MulticastService[]
+}
+
+export interface MulticastOutput extends Omit<MulticastOutputInput, 'services'> {
+  id: number
+  created_at: string
+  updated_at: string
+  service_count: number
+  services?: MulticastService[]
+  status?: MulticastStatus
+}
+
+export interface MulticastStatusList {
+  streaming_enabled: boolean
+  outputs: MulticastStatus[]
+}
+
+export interface MulticastEventInfo {
+  title: string
+  start: string
+  stop: string
+}
+
+export interface MulticastPreview {
+  computed_kbps: number
+  sections: number
+  events: number
+  truncated_events: number
+  services: Array<{
+    service_id: number
+    transport_stream_id: number
+    original_network_id: number
+    display_name: string
+    events: number
+    now: MulticastEventInfo | null
+    next: MulticastEventInfo | null
+  }>
+}
+
+export interface MulticastImportItem {
+  name: string
+  action: ConfigImportAction
+  existing_id?: number
+  changes: string[]
+  service_count: number
+  missing_channels: Array<{ source: string; id: string }>
+}
+
+export interface MulticastImportPlan {
+  version: string
+  items: MulticastImportItem[]
+  summary: { create: number; update: number; unchanged: number; missing_channels: number }
+  applied: boolean
+}
+
+/** Downloads a binary file (e.g. a TS dump); resolves to the file name and contents. */
+async function downloadFile(path: string, fallbackName: string) {
+  return downloadConfig(path, fallbackName)
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
 
@@ -274,6 +388,22 @@ export const api = {
   exportOutputs: () => downloadConfig('/outputs/export', 'xmltv-outputs.xml'),
   previewOutputImport: (file: File) => uploadConfig<OutputImportPlan>('/outputs/import/preview', file),
   importOutputs: (file: File) => uploadConfig<OutputImportPlan>('/outputs/import', file),
+
+  multicastOutputs: () => request<MulticastOutput[]>('/multicast-outputs'),
+  multicastOutput: (id: number) => request<MulticastOutput>(`/multicast-outputs/${id}`),
+  multicastStatus: () => request<MulticastStatusList>('/multicast-outputs/status'),
+  multicastPreview: (id: number) => request<MulticastPreview>(`/multicast-outputs/${id}/preview`),
+  addMulticastOutput: (output: MulticastOutputInput) =>
+    request<{ id: number }>('/multicast-outputs', { method: 'POST', body: JSON.stringify(output) }),
+  updateMulticastOutput: (id: number, output: MulticastOutputInput) =>
+    request<void>(`/multicast-outputs/${id}`, { method: 'PUT', body: JSON.stringify(output) }),
+  deleteMulticastOutput: (id: number) => request<void>(`/multicast-outputs/${id}`, { method: 'DELETE' }),
+  setMulticastOutputEnabled: (id: number, enabled: boolean) =>
+    request<void>(`/multicast-outputs/${id}/activation`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+  downloadMulticastDump: (id: number) => downloadFile(`/multicast-outputs/${id}/dump.ts`, `eit-${id}.ts`),
+  exportMulticastOutputs: () => downloadConfig('/multicast-outputs/export', 'multicast-outputs.xml'),
+  previewMulticastImport: (file: File) => uploadConfig<MulticastImportPlan>('/multicast-outputs/import/preview', file),
+  importMulticastOutputs: (file: File) => uploadConfig<MulticastImportPlan>('/multicast-outputs/import', file),
 
   channel: (id: number) => request<Channel>(`/channels/${id}`),
 

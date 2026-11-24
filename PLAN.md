@@ -104,6 +104,13 @@ Docker stack application for aggregating XMLTV EPG data from multiple sources.
 | GET | /api/v1/outputs/export | Download output configuration XML without tokens ([format](docs/output-config-format.md)) |
 | POST | /api/v1/outputs/import/preview | Validate output configuration XML; plan with missing channels |
 | POST | /api/v1/outputs/import | Apply output configuration XML (never deletes outputs, keeps tokens) |
+| GET/POST | /api/v1/multicast-outputs | List (with live status) / create multicast DVB EIT outputs |
+| GET/PUT/DELETE | /api/v1/multicast-outputs/:id | Output with stations / replace settings + stations / delete |
+| PATCH | /api/v1/multicast-outputs/:id/activation | Switch streaming on/off (`{enabled}`) |
+| GET | /api/v1/multicast-outputs/status | Live playout state of every output (`streaming_enabled` = server switch) |
+| GET | /api/v1/multicast-outputs/:id/preview | Now/next and event count per station, computed bitrate |
+| GET | /api/v1/multicast-outputs/:id/dump.ts | One or more EIT cycles as MPEG-TS (`?cycles=1-10`) |
+| GET/POST | /api/v1/multicast-outputs/export, /import/preview, /import | Multicast configuration XML ([format](docs/multicast-config-format.md)) |
 | GET | /api/v1/channels | List channels (filter: source_id, search) |
 | GET | /api/v1/channels/:id | Channel detail |
 | GET | /api/v1/programmes | EPG query (filter: date, channel_id, source_id, page, limit) |
@@ -119,6 +126,8 @@ Docker stack application for aggregating XMLTV EPG data from multiple sources.
 | Channels | /channels | Channel list with icons, filter by source |
 | Programme Detail | /programmes/:id | Full programme details |
 | Sources | /sources | Source management: upload XML, import stats |
+| Outputs | /outputs | Token-protected XMLTV feeds |
+| Multicast outputs | /multicast | DVB EIT multicast streams for DVB-C modulators: settings, stations with DVB ids, live state, TS dump |
 
 ## Dependencies
 
@@ -197,6 +206,37 @@ Docker stack application for aggregating XMLTV EPG data from multiple sources.
 | Routing | React Router 7 | createBrowserRouter API |
 | Animations | Framer Motion 14 (motion/react) | Smooth transitions |
 | UI components | Radix UI + custom | Accessible, headless |
+
+## Multicast DVB EIT outputs
+
+Replaces the former cherryEPG/Perl chain (import script + SQLite carousel +
+`ringelspiel` UDP player) with native Go code in the backend.
+
+- **Model** (migration `008`): `multicast_outputs` (address, port, PID, chunk
+  time, days ahead, IANA timezone, text encoding, language, table mode, home
+  TSID, TDT/TOT, TTL, interface, enabled), `multicast_output_services`
+  (channel link `ON DELETE SET NULL` + source name / XMLTV id snapshot,
+  frequency, TSID, ONID, SID, enabled, position) and `multicast_eit_versions`
+  (version + content hash per EIT sub_table, kept across restarts).
+- **EIT** (`internal/dvb`): p/f (0x4E/0x4F) and schedule (0x50+/0x60+) with
+  3-hour segments, up to 16 days; short (0x4D: title + sub-title) and
+  extended (0x4E: description, split into up to 16 descriptors) event
+  descriptors; UTF-8 (0x15), ISO 8859-2 (0x10 0x00 0x02) or ISO 6937 text;
+  event id = start minute (stable across re-imports); version bumped only
+  when a sub_table's content changes. Schedule keeps today's past events so
+  versions change only with data or at UTC midnight. Default table mode
+  signals every station as *actual* with its own TSID (as the Luminato
+  headend expects); `actual_other` uses a home TSID.
+- **Playout** (`MulticastManager`): one goroutine per enabled output; the
+  carousel cycle (`chunk_seconds`) carries the full schedule once and p/f
+  every 2 s, split into self-contained slots; 7 TS packets per UDP datagram,
+  null-packet padding, continuity counters per PID, absolute-time pacing,
+  optional TDT/TOT every 5 s on PID 0x14. Rebuild after imports (5 s
+  debounce), at the next p/f change and every 60 s; errors back off 5–60 s.
+- **Deployment**: streaming is off unless `MULTICAST_ENABLED=true`;
+  `docker-compose.multicast.yml` adds a macvlan interface on the headend
+  network. Times in the DB are UTC; the output timezone only drives the TOT
+  local time offset.
 
 ## Risks & Notes
 
