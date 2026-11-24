@@ -163,6 +163,13 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   changes?" `ConfirmDialog` (Keep editing / Discard changes). Reloading or
   leaving the page triggers the browser's `beforeunload` warning. Closing is
   blocked while saving.
+- **File imports:** a header `.btn-secondary` "Import" opens the native file
+  picker; the file is validated server-side and shown in a large `Dialog`
+  preview before anything is written: summary badges (new = success,
+  updated = warning, unchanged = neutral, always with text), a paged table
+  with the per-row result and changed fields, and validation problems as an
+  `.inline-alert.is-error` list. The confirm button names the count
+  ("Import 3 sources"). "Export" is a `.btn-secondary` next to it.
 - **Notifications:** `.notice-stack` top-right; success/info auto-dismiss after
   5s, errors persist. Used for mutation outcomes (source added/updated/
   deleted/refreshed/enabled, output created/saved/deleted, clipboard failure).

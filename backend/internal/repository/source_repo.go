@@ -160,3 +160,58 @@ func (r *SourceRepository) GetByID(ctx context.Context, id int) (*models.Source,
 	}
 	return &s, nil
 }
+
+// ConfigImportItem is one planned change of a source configuration import.
+// ExistingID 0 creates a new source; otherwise the source is updated in place.
+type ConfigImportItem struct {
+	ExistingID             int
+	Name                   string
+	SourceURL              string
+	Enabled                bool
+	RefreshIntervalMinutes int
+	HistoryDays            int
+	ConfigChanged          bool
+	EnabledChanged         bool
+}
+
+// ApplyConfigImport creates and updates sources in one transaction. It never
+// deletes sources. Changing name, URL or schedule clears the import status so
+// the scheduler downloads the source again, exactly like a manual edit.
+func (r *SourceRepository) ApplyConfigImport(ctx context.Context, items []ConfigImportItem) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, item := range items {
+		if item.ExistingID == 0 {
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO sources (name, source_url, enabled, refresh_interval_minutes, history_days)
+				 VALUES ($1, $2, $3, $4, $5)`,
+				item.Name, item.SourceURL, item.Enabled, item.RefreshIntervalMinutes, item.HistoryDays); err != nil {
+				return fmt.Errorf("create source %q: %w", item.Name, err)
+			}
+			continue
+		}
+		if item.ConfigChanged {
+			if _, err := tx.Exec(ctx,
+				`UPDATE sources
+				 SET name = $2, source_url = $3, refresh_interval_minutes = $4, history_days = $5,
+				     last_import_at = NULL, last_import_status = NULL, last_import_error = NULL,
+				     updated_at = now()
+				 WHERE id = $1`,
+				item.ExistingID, item.Name, item.SourceURL, item.RefreshIntervalMinutes, item.HistoryDays); err != nil {
+				return fmt.Errorf("update source %q: %w", item.Name, err)
+			}
+		}
+		if item.EnabledChanged {
+			if _, err := tx.Exec(ctx,
+				`UPDATE sources SET enabled = $2, updated_at = now() WHERE id = $1`,
+				item.ExistingID, item.Enabled); err != nil {
+				return fmt.Errorf("update source %q activation: %w", item.Name, err)
+			}
+		}
+	}
+	return tx.Commit(ctx)
+}

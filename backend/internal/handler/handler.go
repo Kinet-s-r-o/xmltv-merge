@@ -520,3 +520,63 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
+
+// ExportSources downloads the source configuration as a versioned XML file.
+func (h *Handler) ExportSources(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	body, _, err := h.importSvc.ExportSourceConfigs(r.Context(), now)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	filename := "xmltv-sources-" + now.UTC().Format("20060102-150405") + ".xml"
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	w.Write(body)
+}
+
+// PreviewSourceImport validates an uploaded configuration file and returns the
+// planned create/update/unchanged actions without writing anything.
+func (h *Handler) PreviewSourceImport(w http.ResponseWriter, r *http.Request) {
+	h.sourceImport(w, r, false)
+}
+
+// ImportSources validates an uploaded configuration file and applies it.
+func (h *Handler) ImportSources(w http.ResponseWriter, r *http.Request) {
+	h.sourceImport(w, r, true)
+}
+
+func (h *Handler) sourceImport(w http.ResponseWriter, r *http.Request, apply bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, service.MaxSourceConfigBytes+(64<<10))
+	if err := r.ParseMultipartForm(service.MaxSourceConfigBytes + (64 << 10)); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "upload a source configuration file of at most 1 MB", "details": []string{}})
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "file is required", "details": []string{}})
+		return
+	}
+	defer file.Close()
+
+	data, err := service.ReadSourceConfigFile(file)
+	if err == nil {
+		var plan *service.SourceImportPlan
+		plan, err = h.importSvc.ImportSourceConfigs(r.Context(), data, apply)
+		if err == nil {
+			writeJSON(w, http.StatusOK, plan)
+			return
+		}
+	}
+	if cfgErr, ok := service.IsSourceConfigError(err); ok {
+		details := cfgErr.Details
+		if details == nil {
+			details = []string{}
+		}
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]interface{}{"error": cfgErr.Message, "details": details})
+		return
+	}
+	writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": err.Error(), "details": []string{}})
+}

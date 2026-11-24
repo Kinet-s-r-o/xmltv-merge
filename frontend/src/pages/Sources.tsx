@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Database, Link2, Pencil, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react'
-import { api, CreateSourceInput, Source } from '../api/client'
+import { Database, Download, FileUp, Link2, Pencil, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react'
+import { api, ApiError, CreateSourceInput, Source } from '../api/client'
+import { SourceImportDialog, type SourceImportState } from '../components/sources/SourceImportDialog'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Dialog } from '../components/ui/Dialog'
 import { useFeedback } from '../components/ui/Feedback'
@@ -45,6 +46,10 @@ export function Sources() {
   const [sourceSearch, setSourceSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<SourceStatusFilter>('all')
   const [deleteTarget, setDeleteTarget] = useState<Source | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const importFileRef = useRef<File | null>(null)
+  const [importState, setImportState] = useState<SourceImportState>({ status: 'closed' })
+  const [importApplyError, setImportApplyError] = useState<string | null>(null)
 
   const { data, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
@@ -138,6 +143,68 @@ export function Sources() {
     onError: (err: Error, { source }) => notify({ tone: 'error', title: `Could not change ${source.name}`, message: err.message }),
   })
 
+  const exportMutation = useMutation({
+    mutationFn: () => api.exportSources(),
+    onSuccess: ({ filename, blob }) => {
+      const href = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = href
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(href), 0)
+      const exported = sources.filter((source) => source.source_url).length
+      notify({ tone: 'success', title: 'Sources exported', message: `${filename} contains the configuration of ${exported} URL source${exported === 1 ? '' : 's'}; channels and programmes are not included.` })
+    },
+    onError: (err: Error) => notify({ tone: 'error', title: 'Could not export sources', message: err.message }),
+  })
+
+  const previewImport = async (file: File) => {
+    importFileRef.current = file
+    setImportApplyError(null)
+    setImportState({ status: 'previewing', fileName: file.name })
+    try {
+      const plan = await api.previewSourceImport(file)
+      if (importFileRef.current === file) setImportState({ status: 'ready', fileName: file.name, plan })
+    } catch (err) {
+      if (importFileRef.current !== file) return
+      setImportState({
+        status: 'invalid',
+        fileName: file.name,
+        message: err instanceof Error ? err.message : String(err),
+        details: err instanceof ApiError ? err.details : [],
+      })
+    }
+  }
+
+  const closeImport = () => {
+    importFileRef.current = null
+    setImportApplyError(null)
+    setImportState({ status: 'closed' })
+  }
+
+  const importMutation = useMutation({
+    mutationFn: (file: File) => api.importSources(file),
+    onSuccess: (plan) => {
+      const { create, update, unchanged } = plan.summary
+      notify({
+        tone: 'success',
+        title: 'Sources imported',
+        message: `${create} new, ${update} updated, ${unchanged} unchanged. New and changed sources download on the next scheduler run.`,
+      })
+      closeImport()
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
+    },
+    onError: (err: Error) => {
+      if (err instanceof ApiError && err.details.length > 0 && importFileRef.current) {
+        setImportState({ status: 'invalid', fileName: importFileRef.current.name, message: err.message, details: err.details })
+      } else {
+        setImportApplyError(err.message)
+      }
+    },
+  })
+
   const query = sourceSearch.trim().toLocaleLowerCase()
   const filteredSources = sources.filter((source) => {
     const matchesSearch = !query || source.name.toLocaleLowerCase().includes(query) || source.source_url.toLocaleLowerCase().includes(query)
@@ -180,10 +247,54 @@ export function Sources() {
         title="Sources"
         description="XMLTV URLs imported on a schedule. Disabled sources keep their stored guide data but are not refreshed."
       >
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".xml,application/xml,text/xml"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (file) void previewImport(file)
+          }}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => importInputRef.current?.click()}
+          disabled={importState.status !== 'closed'}
+          title="Add or update sources from an XML configuration file"
+        >
+          <FileUp className="h-3.5 w-3.5" aria-hidden="true" /> Import
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => exportMutation.mutate()}
+          disabled={exportMutation.isPending || sources.length === 0}
+          title="Download the source configuration as XML"
+        >
+          {exportMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
+          {exportMutation.isPending ? 'Exporting…' : 'Export'}
+        </button>
         <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source
         </button>
       </PageHeader>
+
+      <SourceImportDialog
+        state={importState}
+        applying={importMutation.isPending}
+        applyError={importApplyError}
+        onClose={closeImport}
+        onConfirm={() => {
+          if (!importFileRef.current) return
+          setImportApplyError(null)
+          importMutation.mutate(importFileRef.current)
+        }}
+      />
 
       <Dialog
         open={formOpen}

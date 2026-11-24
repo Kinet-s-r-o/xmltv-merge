@@ -100,6 +100,51 @@ export interface CreateSourceInput {
   history_days: number
 }
 
+export type SourceImportAction = 'create' | 'update' | 'unchanged'
+
+export interface SourceImportItem {
+  name: string
+  url: string
+  enabled: boolean
+  refresh_interval_minutes: number
+  history_days: number
+  action: SourceImportAction
+  existing_id?: number
+  changes: string[]
+}
+
+export interface SourceImportPlan {
+  version: string
+  items: SourceImportItem[]
+  summary: { create: number; update: number; unchanged: number }
+  applied: boolean
+}
+
+/** API error that may carry a list of validation problems (e.g. source configuration import). */
+export class ApiError extends Error {
+  details: string[]
+  constructor(message: string, details: string[] = []) {
+    super(message)
+    this.name = 'ApiError'
+    this.details = details
+  }
+}
+
+async function failure(res: Response): Promise<ApiError> {
+  const err = await res.json().catch(() => ({ error: res.statusText }))
+  return new ApiError(err.error || `HTTP ${res.status}`, Array.isArray(err.details) ? err.details : [])
+}
+
+function uploadSourceConfig(path: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return fetch(`${API_BASE}${path}`, { method: 'POST', body: formData }).then(async (res) => {
+    if (!res.ok) throw await failure(res)
+    const plan = (await res.json()) as SourceImportPlan
+    return { ...plan, items: plan.items ?? [] }
+  })
+}
+
 export interface Paginated<T> {
   data: T[]
   total: number
@@ -166,6 +211,19 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(source),
     }),
+
+  /** Downloads the source configuration as XML; resolves to the file name and contents. */
+  exportSources: async () => {
+    const res = await fetch(`${API_BASE}/sources/export`)
+    if (!res.ok) throw await failure(res)
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'xmltv-sources.xml'
+    return { filename, blob: await res.blob() }
+  },
+
+  previewSourceImport: (file: File) => uploadSourceConfig('/sources/import/preview', file),
+
+  importSources: (file: File) => uploadSourceConfig('/sources/import', file),
 
   deleteSource: (id: number) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
 
