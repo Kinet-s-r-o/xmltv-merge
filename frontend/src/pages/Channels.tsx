@@ -1,94 +1,146 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ListVideo, Search } from 'lucide-react'
 import { api } from '../api/client'
-import { LoadingPanel } from '../components/ui/LoadingPanel'
+import { PageHeader } from '../components/ui/PageHeader'
+import { Pagination, readStoredPageSize, storePageSize } from '../components/ui/Pagination'
+import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
+
+const PAGE_SIZE_KEY = 'xmltv-channels-page-size'
 
 export function Channels() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<number | undefined>()
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => readStoredPageSize(PAGE_SIZE_KEY, 50))
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250)
     return () => window.clearTimeout(timer)
   }, [searchInput])
 
-  const { data: sources } = useQuery({
+  useEffect(() => setPage(1), [search, sourceFilter, pageSize])
+
+  const { data: sourceData } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
   })
+  const sources = useMemo(() => sourceData ?? [], [sourceData])
+  const sourceNames = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
 
-  const { data: channels, isLoading, isError, error, refetch } = useQuery({
+  const { data: channelData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['channels', sourceFilter, search],
     queryFn: () => api.channels({ source_id: sourceFilter, search: search || undefined }),
   })
+  const channels = channelData ?? []
+  const pageCount = Math.max(1, Math.ceil(channels.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const visible = channels.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const filtered = Boolean(search) || sourceFilter !== undefined
 
   return (
-    <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Channels</h1>
-        <p className="text-sm text-zinc-400 mt-1">
-          {channels?.length ?? 0} channels
-        </p>
-      </div>
+    <>
+      <PageHeader
+        title="Channels"
+        description="Stations imported from every XMLTV source, with the XMLTV channel ID used in feeds and outputs."
+      />
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative min-w-0 flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Search channels..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="min-h-11 w-full pl-9 pr-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
-          />
-        </div>
-        <select
-          value={sourceFilter ?? ''}
-          onChange={(e) => setSourceFilter(e.target.value ? Number(e.target.value) : undefined)}
-          className="min-h-11 max-w-full px-3 py-2 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 focus:outline-none focus:border-indigo-500/50"
-        >
-          <option value="">All Sources</option>
-          {sources?.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Channel List */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl divide-y divide-zinc-800">
-        {isLoading ? (
-          <LoadingPanel label="Loading channels" compact />
-        ) : isError ? (
-          <div role="alert" className="flex flex-wrap items-center justify-center gap-3 p-6 text-sm text-red-300">
-            <span>Could not load channels: {(error as Error).message}</span>
-            <button type="button" onClick={() => refetch()} className="min-h-11 rounded-lg bg-zinc-800 px-3 py-2 text-zinc-200 hover:bg-zinc-700">Retry</button>
+      <section className="data-panel" aria-labelledby="channels-table-title">
+        <div className="table-panel-toolbar">
+          <div>
+            <h2 id="channels-table-title">Imported channels</h2>
+            <p className="font-mono">{channels.length.toLocaleString()} {filtered ? 'matching' : 'total'}</p>
           </div>
-        ) : channels && channels.length > 0 ? (
-          channels.map((ch) => (
-            <div key={ch.id} className="p-4 flex items-center gap-3">
-              {ch.icon_url ? (
-                <img src={ch.icon_url} alt="" className="w-8 h-8 rounded object-contain" />
-              ) : (
-                <div className="w-8 h-8 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-500">
-                  {ch.name.charAt(0)}
-                </div>
-              )}
-              <div className="flex-1">
-                <p className="text-sm font-medium text-zinc-200">{ch.name}</p>
-                <p className="text-xs text-zinc-500">{ch.external_id}</p>
-              </div>
-              <span className="text-xs text-zinc-500">
-                {sources?.find((s) => s.id === ch.source_id)?.name}
-              </span>
-            </div>
-          ))
+          <div className="toolbar-filters">
+            <label className="search-field w-full sm:w-72">
+              <span className="sr-only">Search channels by name or XMLTV ID</span>
+              <Search className="h-3.5 w-3.5" aria-hidden="true" />
+              <input
+                type="search"
+                className="input"
+                placeholder="Search name or XMLTV ID"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+              />
+            </label>
+            <label className="w-full sm:w-56">
+              <span className="sr-only">Filter by source</span>
+              <select
+                className="input"
+                value={sourceFilter ?? ''}
+                onChange={(event) => setSourceFilter(event.target.value ? Number(event.target.value) : undefined)}
+              >
+                <option value="">All sources</option>
+                {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <LoadingState title="Loading channels" compact />
+        ) : isError ? (
+          <ResourceError title="Channels could not be loaded" message={errorMessage(error)} onRetry={() => refetch()} />
+        ) : channels.length === 0 ? (
+          filtered ? (
+            <EmptyState
+              icon={Search}
+              title="No channels match the current filters"
+              message="Clear the search or choose All sources. Channel names and XMLTV IDs are matched."
+            >
+              <button type="button" className="btn btn-secondary" onClick={() => { setSearchInput(''); setSearch(''); setSourceFilter(undefined) }}>Clear filters</button>
+            </EmptyState>
+          ) : (
+            <EmptyState
+              icon={ListVideo}
+              title="No channels imported yet"
+              message="Channels appear after a source finishes its first XMLTV import. Add a source or check its import status."
+            >
+              <Link to="/sources" className="btn btn-primary">Go to sources</Link>
+            </EmptyState>
+          )
         ) : (
-          <div className="p-6 text-center text-zinc-500">No channels found.</div>
+          <>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Channel</th>
+                    <th scope="col">XMLTV ID</th>
+                    <th scope="col">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((channel) => (
+                    <tr key={channel.id}>
+                      <td>
+                        <span className="flex min-w-0 items-center gap-3">
+                          {channel.icon_url
+                            ? <img src={channel.icon_url} alt="" className="channel-logo" loading="lazy" />
+                            : <span className="channel-logo" aria-hidden="true">{channel.name.charAt(0).toUpperCase()}</span>}
+                          <span className="table-text font-medium">{channel.name}</span>
+                        </span>
+                      </td>
+                      <td><span className="table-text font-mono break-all">{channel.external_id}</span></td>
+                      <td><span className="table-text">{sourceNames.get(channel.source_id) ?? `Source #${channel.source_id}`}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={currentPage}
+              pageSize={pageSize}
+              total={channels.length}
+              itemLabel="channels"
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); storePageSize(PAGE_SIZE_KEY, size) }}
+            />
+          </>
         )}
-      </div>
-    </div>
+      </section>
+    </>
   )
 }

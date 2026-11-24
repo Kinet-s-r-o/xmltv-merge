@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kinet UI/UX — design system preview</title>
+<link rel="stylesheet" href="../examples/base.css" />
+<style>
+  /* Preview-only helpers (not part of the design system). */
+  .preview-section { margin-top: 24px; }
+  .preview-label { margin: 0 0 8px; color: rgb(var(--text-muted)); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+  .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .preview-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .preview-form { display: grid; gap: 14px; max-width: 420px; }
+  .preview-form .field { display: grid; gap: 5px; }
+  .preview-form label { font-size: 12px; font-weight: 500; color: rgb(var(--text-secondary)); }
+  .preview-ops-4 { grid-template-columns: repeat(4, 1fr); }
+  .preview-search { width: 220px; }
+  .preview-note { margin: 0; font-size: 12px; color: rgb(var(--text-secondary)); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="app-sidebar is-open" aria-label="Primary navigation">
+    <div class="sidebar-brand">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div>
+          <div class="brand-name">Kinet</div>
+          <div class="brand-subtitle">CONTROL PLANE</div>
+        </div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-group">
+        <p class="nav-section">Operations</p>
+        <a class="nav-link is-active" href="#"><span aria-hidden="true">▦</span> Dashboard</a>
+        <a class="nav-link" href="#"><span aria-hidden="true">⌗</span> Devices</a>
+        <a class="nav-link" href="#"><span aria-hidden="true">≣</span> Parameters</a>
+      </div>
+      <div class="nav-group">
+        <p class="nav-section">Fleet</p>
+        <a class="nav-link" href="#"><span aria-hidden="true">◍</span> Firmware</a>
+        <a class="nav-link" href="#"><span aria-hidden="true">⚑</span> Faults</a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="operator-card">
+        <div class="operator-avatar" aria-hidden="true">OP</div>
+        <div class="operator-copy">
+          <strong>operator@kinet</strong>
+          <span>Administrator</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="app-main">
+    <header class="topbar">
+      <div class="topbar-title">
+        <div>
+          <p>OPERATIONS</p>
+          <h1>Dashboard</h1>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-button" aria-label="Toggle theme">◐</button>
+        <button class="icon-button" aria-label="Notifications">◷</button>
+      </div>
+    </header>
+
+    <main class="content-area">
+      <!-- Page header -->
+      <header class="page-header">
+        <div class="page-header-copy">
+          <h1>Fleet overview</h1>
+          <p>Live status of managed devices across all sites. Data refreshes every 30 seconds.</p>
+        </div>
+        <div class="page-header-tools">
+          <button class="btn btn-secondary">Export</button>
+          <button class="btn btn-primary">Add device</button>
+        </div>
+      </header>
+
+      <!-- Ops register -->
+      <div class="preview-section">
+        <p class="preview-label">Ops register</p>
+        <dl class="ops-register preview-ops-4">
+          <div class="ops-register-cell is-online"><dt>Online</dt><dd>1,284</dd><small>98.2% of fleet</small></div>
+          <div class="ops-register-cell is-offline"><dt>Offline</dt><dd>23</dd><small>last 24h</small></div>
+          <div class="ops-register-cell is-warning"><dt>Warnings</dt><dd>7</dd><small>needs review</small></div>
+          <div class="ops-register-cell"><dt>Firmware pending</dt><dd>412</dd><small>v2.4.1 rollout</small></div>
+        </dl>
+      </div>
+
+      <!-- Data table -->
+      <div class="preview-section">
+        <p class="preview-label">Data table</p>
+        <div class="data-panel">
+          <div class="table-panel-toolbar">
+            <div><h2>Devices</h2><p>1,314 total · filtered by site</p></div>
+            <div class="preview-row">
+              <input class="input preview-search" placeholder="Search serial or name" aria-label="Search devices" />
+              <button class="btn btn-secondary">Filter</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Serial</th>
+                  <th>Status</th>
+                  <th>Last seen</th>
+                  <th class="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="table-text">ONT-0042 · Site A</td>
+                  <td class="table-text font-mono">SN-8842-1190-0042</td>
+                  <td><span class="badge badge-success">online</span></td>
+                  <td class="table-text font-mono">2025-06-14 09:41:02</td>
+                  <td class="text-right"><button class="btn btn-secondary btn-xs">Manage</button></td>
+                </tr>
+                <tr>
+                  <td class="table-text">ONT-0117 · Site B</td>
+                  <td class="table-text font-mono">SN-8842-1190-0117</td>
+                  <td><span class="badge badge-warning">warning</span></td>
+                  <td class="table-text font-mono">2025-06-14 09:38:47</td>
+                  <td class="text-right"><button class="btn btn-secondary btn-xs">Manage</button></td>
+                </tr>
+                <tr>
+                  <td class="table-text">ONT-0203 · Site A</td>
+                  <td class="table-text font-mono">SN-8842-1190-0203</td>
+                  <td><span class="badge badge-error">offline</span></td>
+                  <td class="table-text font-mono">2025-06-13 22:10:19</td>
+                  <td class="text-right"><button class="btn btn-secondary btn-xs">Manage</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form + states -->
+      <div class="preview-section">
+        <p class="preview-label">Form, states, buttons</p>
+        <div class="preview-grid">
+          <div class="data-panel">
+            <div class="data-panel-header"><div><h2>Create device</h2><p>Register a new managed device</p></div></div>
+            <div class="data-panel-body">
+              <form class="preview-form">
+                <div class="field">
+                  <label for="pv-name">Device name</label>
+                  <input class="input" id="pv-name" placeholder="ONT-0301" />
+                </div>
+                <div class="field">
+                  <label for="pv-serial">Serial number</label>
+                  <input class="input font-mono" id="pv-serial" placeholder="SN-8842-1190-0301" />
+                  <p class="field-error">Serial must match the vendor format.</p>
+                </div>
+                <div class="field">
+                  <label for="pv-site">Site</label>
+                  <select class="input" id="pv-site"><option>Site A</option><option>Site B</option></select>
+                </div>
+                <div class="preview-row">
+                  <button class="btn btn-primary">Create</button>
+                  <button class="btn btn-secondary">Cancel</button>
+                  <button class="btn btn-danger">Delete</button>
+                  <button class="btn btn-primary" disabled>Disabled</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="data-panel">
+            <div class="data-panel-header"><div><h2>Empty state</h2></div></div>
+            <div class="resource-state">
+              <div class="resource-state-icon" aria-hidden="true">∅</div>
+              <strong>No devices match the current filters</strong>
+              <p>Clear the site filter or add a device to this site.</p>
+            </div>
+          </div>
+          <div class="data-panel">
+            <div class="data-panel-header"><div><h2>Error state</h2></div></div>
+            <div class="resource-state is-error">
+              <div class="resource-state-icon" aria-hidden="true">!</div>
+              <strong>Unable to load devices</strong>
+              <p>The device list could not be retrieved. Check the connection and retry.</p>
+              <div class="resource-state-actions"><button class="btn btn-secondary">Retry</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs + badges -->
+      <div class="preview-section">
+        <p class="preview-label">Tabs and badges</p>
+        <div class="data-panel">
+          <div class="tab-bar" role="tablist">
+            <button class="tab-btn is-active" role="tab" aria-selected="true">Overview</button>
+            <button class="tab-btn" role="tab" aria-selected="false">Parameters</button>
+            <button class="tab-btn" role="tab" aria-selected="false">History</button>
+          </div>
+          <div class="data-panel-body">
+            <div class="preview-row">
+              <span class="badge badge-success">online</span>
+              <span class="badge badge-error">offline</span>
+              <span class="badge badge-warning">warning</span>
+              <span class="font-mono">192.168.1.1</span>
+              <span class="font-mono">2025-06-14 09:41:02</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Dialog (open) -->
+<div class="dialog-backdrop" role="presentation">
+  <section class="dialog-panel dialog-medium" role="dialog" aria-modal="true" aria-labelledby="pv-dialog-title">
+    <header class="dialog-header">
+      <div>
+        <h2 id="pv-dialog-title">Confirm firmware rollout</h2>
+        <p>This will push v2.4.1 to 412 devices. The operation cannot be undone.</p>
+      </div>
+      <button class="icon-button" aria-label="Close dialog">✕</button>
+    </header>
+    <div class="dialog-content">
+      <div class="dialog-body">
+        <p class="preview-note">Target group: <span class="font-mono">fleet-prod</span> · 412 devices · estimated duration 45 min.</p>
+      </div>
+    </div>
+    <footer class="dialog-actions">
+      <button class="btn btn-secondary">Cancel</button>
+      <button class="btn btn-primary">Start rollout</button>
+    </footer>
+  </section>
+</div>
+
+<!-- Notifications -->
+<div class="notice-stack" role="region" aria-label="Notifications">
+  <div class="notice notice-success" role="status">
+    <span class="notice-icon" aria-hidden="true">✓</span>
+    <div class="notice-copy"><strong>Rollout started</strong><p>412 devices queued for firmware v2.4.1.</p></div>
+    <button class="icon-button" aria-label="Dismiss notification">✕</button>
+  </div>
+  <div class="notice notice-error" role="alert">
+    <span class="notice-icon" aria-hidden="true">✕</span>
+    <div class="notice-copy">
+      <strong>Device unreachable</strong>
+      <p>SN-8842-1190-0203 did not respond to the CWMP session.</p>
+      <details><summary>Details</summary><pre>ACSE: 0x55 (session timeout after 30s)</pre></details>
+    </div>
+    <button class="icon-button" aria-label="Dismiss notification">✕</button>
+  </div>
+</div>
+</body>
+</html>

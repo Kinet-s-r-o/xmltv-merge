@@ -1,37 +1,57 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link2, Clock3, CheckCircle, XCircle, RefreshCw, Trash2, Pencil, Save, X, Search, Power } from 'lucide-react'
+import { Database, Link2, Pencil, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { api, CreateSourceInput, Source } from '../api/client'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
-import { LoadingPanel } from '../components/ui/LoadingPanel'
+import { useFeedback } from '../components/ui/Feedback'
+import { PageHeader } from '../components/ui/PageHeader'
+import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
+import { formatInterval, formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
 
 type SourceStatusFilter = 'all' | 'healthy' | 'attention' | 'disabled'
 
-function sourceStatus(source: Source): Exclude<SourceStatusFilter, 'all'> {
-  if (!source.enabled) return 'disabled'
-  if (source.last_import_status === 'success') return 'healthy'
-  return 'attention'
+function matchesStatus(source: Source, filter: SourceStatusFilter) {
+  const health = sourceHealth(source)
+  if (filter === 'all') return true
+  if (filter === 'attention') return health === 'failed' || health === 'pending'
+  return health === filter
 }
 
 export function Sources() {
   const queryClient = useQueryClient()
+  const { notify } = useFeedback()
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [intervalHours, setIntervalHours] = useState(6)
   const [historyDays, setHistoryDays] = useState(7)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [sourceSearch, setSourceSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<SourceStatusFilter>('all')
-  const [deleteSourceId, setDeleteSourceId] = useState<number | null>(null)
-  const [deleteSourceName, setDeleteSourceName] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<Source | null>(null)
 
-  const { data: sources, isLoading, isError, error: sourcesError, refetch } = useQuery({
+  const { data, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
     refetchInterval: 30_000,
   })
+  const sources = data ?? []
+  const editingSource = sources.find((source) => source.id === editingId)
+
+  const invalidateGuideData = () => {
+    queryClient.invalidateQueries({ queryKey: ['sources'] })
+    queryClient.invalidateQueries({ queryKey: ['channels'] })
+    queryClient.invalidateQueries({ queryKey: ['programmes'] })
+  }
+
+  const resetForm = () => {
+    setEditingId(null)
+    setName('')
+    setUrl('')
+    setIntervalHours(6)
+    setHistoryDays(7)
+    setFormError(null)
+  }
 
   const addMutation = useMutation({
     mutationFn: () => api.addSource({
@@ -41,69 +61,60 @@ export function Sources() {
       history_days: historyDays,
     }),
     onSuccess: () => {
-      setName('')
-      setUrl('')
-      setError(null)
-      setSuccess(true)
-      window.setTimeout(() => setSuccess(false), 5000)
+      notify({ tone: 'success', title: 'Source added', message: `${name.trim()} was saved; its first XMLTV download is scheduled.` })
+      resetForm()
       queryClient.invalidateQueries({ queryKey: ['sources'] })
     },
-    onError: (err: Error) => setError(err.message),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteSource(id),
-    onSuccess: () => {
-      setError(null)
-      queryClient.invalidateQueries({ queryKey: ['sources'] })
-      queryClient.invalidateQueries({ queryKey: ['channels'] })
-      queryClient.invalidateQueries({ queryKey: ['programmes'] })
-    },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, source }: { id: number; source: CreateSourceInput }) =>
-      api.updateSource(id, source),
-    onSuccess: () => {
-      setEditingId(null)
-      setName('')
-      setUrl('')
-      setError(null)
+    mutationFn: ({ id, source }: { id: number; source: CreateSourceInput }) => api.updateSource(id, source),
+    onSuccess: (_, { source }) => {
+      notify({ tone: 'success', title: 'Source updated', message: `${source.name} uses the new URL and schedule from the next refresh.` })
+      resetForm()
       queryClient.invalidateQueries({ queryKey: ['sources'] })
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (source: Source) => api.deleteSource(source.id),
+    onSuccess: (_, source) => {
+      notify({ tone: 'success', title: 'Source deleted', message: `${source.name} and its channels and programmes were removed.` })
+      if (editingId === source.id) resetForm()
+      invalidateGuideData()
+    },
+    onError: (err: Error, source) => notify({ tone: 'error', title: `Could not delete ${source.name}`, message: err.message }),
   })
 
   const refreshMutation = useMutation({
-    mutationFn: (id: number) => api.refreshSource(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sources'] })
-      queryClient.invalidateQueries({ queryKey: ['channels'] })
-      queryClient.invalidateQueries({ queryKey: ['programmes'] })
+    mutationFn: (source: Source) => api.refreshSource(source.id),
+    onSuccess: (_, source) => {
+      notify({ tone: 'info', title: 'Refresh started', message: `${source.name} is downloading and importing its XMLTV feed.` })
+      invalidateGuideData()
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error, source) => notify({ tone: 'error', title: `Could not refresh ${source.name}`, message: err.message }),
   })
 
   const activationMutation = useMutation({
-    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => api.setSourceEnabled(id, enabled),
-    onSuccess: () => {
-      setError(null)
+    mutationFn: ({ source, enabled }: { source: Source; enabled: boolean }) => api.setSourceEnabled(source.id, enabled),
+    onSuccess: (_, { source, enabled }) => {
+      notify({
+        tone: 'success',
+        title: enabled ? 'Source enabled' : 'Source disabled',
+        message: enabled ? `${source.name} is refreshed on its schedule again.` : `${source.name} keeps its stored data but is no longer refreshed.`,
+      })
       queryClient.invalidateQueries({ queryKey: ['sources'] })
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error, { source }) => notify({ tone: 'error', title: `Could not change ${source.name}`, message: err.message }),
   })
 
-  const filteredSources = (sources ?? []).filter((source) => {
-    const query = sourceSearch.trim().toLocaleLowerCase()
+  const query = sourceSearch.trim().toLocaleLowerCase()
+  const filteredSources = sources.filter((source) => {
     const matchesSearch = !query || source.name.toLocaleLowerCase().includes(query) || source.source_url.toLocaleLowerCase().includes(query)
-    return matchesSearch && (statusFilter === 'all' || sourceStatus(source) === statusFilter)
+    return matchesSearch && matchesStatus(source, statusFilter)
   })
-
-  const handleDelete = (id: number, sourceName: string) => {
-    setDeleteSourceId(id)
-    setDeleteSourceName(sourceName)
-  }
 
   const handleEdit = (source: Source) => {
     setEditingId(source.id)
@@ -111,231 +122,274 @@ export function Sources() {
     setUrl(source.source_url)
     setIntervalHours(source.refresh_interval_minutes / 60)
     setHistoryDays(source.history_days)
-    setError(null)
+    setFormError(null)
+    document.getElementById('source-form')?.scrollIntoView({ block: 'nearest' })
+    document.getElementById('source-name')?.focus()
   }
 
+  const intervalInvalid = !Number.isFinite(intervalHours) || intervalHours < 1 || intervalHours > 168
+  const historyInvalid = !Number.isFinite(historyDays) || historyDays < 1 || historyDays > 3650
+  const saving = addMutation.isPending || updateMutation.isPending
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Sources</h1>
-        <p className="text-sm text-zinc-400 mt-1">Add XMLTV URLs and schedule automatic updates</p>
-      </div>
+    <>
+      <PageHeader
+        title="Sources"
+        description="XMLTV URLs imported on a schedule. Disabled sources keep their stored guide data but are not refreshed."
+      />
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (editingId !== null) {
-            updateMutation.mutate({
-              id: editingId,
-              source: { name: name.trim(), url: url.trim(), refresh_interval_minutes: intervalHours * 60, history_days: historyDays },
-            })
-          } else {
-            addMutation.mutate()
-          }
-        }}
-        className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3"
-      >
-        <div className="grid items-end gap-3 lg:grid-cols-[minmax(140px,2fr)_minmax(260px,5fr)_minmax(130px,1.5fr)_minmax(130px,1.5fr)_auto_auto]">
-          <label className="text-xs text-zinc-400">
-            Source name
-            <input
-              required
-              value={name}
-              onChange={(e) => { setName(e.target.value); setSuccess(false) }}
-              placeholder="e.g. My EPG"
-              className="mt-1 w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
-            />
-          </label>
-          <label className="text-xs text-zinc-400">
-            XMLTV URL
-            <input
-              required
-              type="url"
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); setSuccess(false) }}
-              placeholder="https://example.com/epg.xml"
-              className="mt-1 w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500/50"
-            />
-          </label>
-          <label className="text-xs text-zinc-400">
-            Update every
-            <span className="mt-1 flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={168}
-                value={intervalHours}
-                onChange={(e) => setIntervalHours(Number(e.target.value))}
-                className="w-24 px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-              />
-              hours
-            </span>
-          </label>
-          <label className="text-xs text-zinc-400">
-            Keep history
-            <span className="mt-1 flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={3650}
-                value={historyDays}
-                onChange={(e) => setHistoryDays(Number(e.target.value))}
-                className="w-24 px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-              />
-              days
-            </span>
-          </label>
-          <button
-            type="submit"
-            disabled={!name.trim() || !url.trim() || intervalHours < 1 || intervalHours > 168 || historyDays < 1 || historyDays > 3650 || addMutation.isPending || updateMutation.isPending}
-            className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            {editingId !== null ? <Save className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
-            {updateMutation.isPending ? 'Saving...' : addMutation.isPending ? 'Adding...' : editingId !== null ? 'Save changes' : 'Add source'}
-          </button>
+      <section id="source-form" className="data-panel" aria-labelledby="source-form-title">
+        <div className="data-panel-header">
+          <div>
+            <h2 id="source-form-title">{editingId !== null ? <><Pencil className="h-4 w-4" aria-hidden="true" /> Edit source</> : <><Link2 className="h-4 w-4" aria-hidden="true" /> Add XMLTV source</>}</h2>
+            <p>{editingId !== null ? `Changes apply to ${editingSource?.name ?? 'this source'} from its next refresh.` : 'The first download starts right after saving.'}</p>
+          </div>
+        </div>
+        <form
+          className="data-panel-body flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            setFormError(null)
+            const source = { name: name.trim(), url: url.trim(), refresh_interval_minutes: intervalHours * 60, history_days: historyDays }
+            if (editingId !== null) updateMutation.mutate({ id: editingId, source })
+            else addMutation.mutate()
+          }}
+        >
           {editingId !== null && (
-            <button type="button" onClick={() => { setEditingId(null); setName(''); setUrl(''); setHistoryDays(7) }} className="px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded-lg flex items-center justify-center gap-1">
-              <X className="w-4 h-4" /> Cancel
-            </button>
+            <div className="form-dirty-banner" role="status">
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Editing {editingSource?.name ?? 'source'} — save the changes or cancel to discard them.
+            </div>
           )}
-          {success && <span role="status" aria-live="polite" className="text-xs text-emerald-400 lg:col-span-full">Source added; first download is scheduled.</span>}
-        </div>
-      </form>
-
-      {error && (
-        <div role="alert" aria-live="assertive" className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <XCircle className="w-5 h-5 text-red-400" />
-          <p className="text-sm text-red-300">{error}</p>
-        </div>
-      )}
-
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-zinc-800">
-          <h2 className="text-sm font-medium text-zinc-300">Existing Sources</h2>
-          <label className="relative block w-full max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-            <input
-              type="search"
-              value={sourceSearch}
-              onChange={(event) => setSourceSearch(event.target.value)}
-              placeholder="Search sources..."
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:outline-none"
-            />
-          </label>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SourceStatusFilter)} aria-label="Filter sources by status" className="min-h-11 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 focus:border-indigo-500/50 focus:outline-none">
-            <option value="all">All statuses</option>
-            <option value="healthy">Healthy</option>
-            <option value="attention">Needs attention</option>
-            <option value="disabled">Disabled</option>
-          </select>
-        </div>
-        {isLoading ? (
-          <LoadingPanel label="Loading sources" compact />
-        ) : isError ? (
-          <div role="alert" className="p-6 flex flex-wrap items-center justify-center gap-3 text-sm text-red-400">
-            <span>Could not load sources: {(sourcesError as Error).message}</span>
-            <button onClick={() => refetch()} className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200">
-              Retry
+          <div className="grid items-start gap-3 lg:grid-cols-[minmax(160px,2fr)_minmax(260px,5fr)_auto_auto]">
+            <label className="field">
+              Source name
+              <input
+                id="source-name"
+                required
+                className="input"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Provider EPG – SK"
+              />
+            </label>
+            <label className="field">
+              XMLTV URL
+              <input
+                required
+                type="url"
+                className="input font-mono"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="https://provider.example/epg.xml.gz"
+              />
+            </label>
+            <label className="field">
+              Refresh interval
+              <span className="field-inline">
+                <input
+                  type="number"
+                  min={1}
+                  max={168}
+                  className="input input-number font-mono"
+                  value={intervalHours}
+                  aria-invalid={intervalInvalid || undefined}
+                  aria-describedby="interval-hint"
+                  onChange={(event) => setIntervalHours(Number(event.target.value))}
+                />
+                hours
+              </span>
+              <span id="interval-hint" className={intervalInvalid ? 'field-error' : 'field-hint'}>1–168 hours</span>
+            </label>
+            <label className="field">
+              Keep history
+              <span className="field-inline">
+                <input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  className="input input-number font-mono"
+                  value={historyDays}
+                  aria-invalid={historyInvalid || undefined}
+                  aria-describedby="history-hint"
+                  onChange={(event) => setHistoryDays(Number(event.target.value))}
+                />
+                days
+              </span>
+              <span id="history-hint" className={historyInvalid ? 'field-error' : 'field-hint'}>1–3650 days of past programmes</span>
+            </label>
+          </div>
+          {formError && (
+            <p className="inline-alert is-error" role="alert">
+              {editingId !== null ? 'Changes were not saved: ' : 'Source was not added: '}{formError}
+            </p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            {editingId !== null && (
+              <button type="button" className="btn btn-secondary" onClick={resetForm} disabled={saving}>
+                <X className="h-3.5 w-3.5" aria-hidden="true" /> Cancel
+              </button>
+            )}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={!name.trim() || !url.trim() || intervalInvalid || historyInvalid || saving}
+            >
+              {saving ? <span className="spinner spinner-sm" aria-hidden="true" /> : editingId !== null ? <Save className="h-3.5 w-3.5" aria-hidden="true" /> : <Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              {saving ? 'Working…' : editingId !== null ? 'Save changes' : 'Add source'}
             </button>
           </div>
-        ) : filteredSources.length > 0 ? (
-          <div className="divide-y divide-zinc-800">
-            {filteredSources.map((source) => (
-              <div key={source.id} className="p-4 flex flex-wrap items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-200">{source.name}</p>
-                  {source.source_url && (
-                    <a href={source.source_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 break-all">
-                      {source.source_url}
-                    </a>
-                  )}
-                  <p className="text-xs text-zinc-500 mt-1">
-                    {source.channel_count ?? 0} channels · {source.programme_count ?? 0} programmes · every {source.refresh_interval_minutes / 60}h · keep {source.history_days} days
-                  </p>
-                  <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${sourceStatus(source) === 'healthy' ? 'bg-emerald-500/10 text-emerald-400' : sourceStatus(source) === 'disabled' ? 'bg-zinc-700/60 text-zinc-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                    {sourceStatus(source) === 'healthy' ? 'Healthy' : sourceStatus(source) === 'disabled' ? 'Disabled' : 'Needs attention'}
-                  </span>
-                </div>
-                <div className="ml-auto flex w-full max-w-[440px] items-center gap-4">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={source.enabled}
-                    aria-label={`${source.enabled ? 'Disable' : 'Enable'} ${source.name}`}
-                    title={source.enabled ? 'Disable source' : 'Enable source'}
-                    onClick={() => {
-                      setError(null)
-                      activationMutation.mutate({ id: source.id, enabled: !source.enabled })
-                    }}
-                    disabled={activationMutation.isPending && activationMutation.variables?.id === source.id}
-                    className={`group relative h-7 w-12 shrink-0 rounded-full p-0.5 shadow-inner transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:cursor-wait disabled:opacity-60 ${source.enabled ? 'bg-emerald-500' : 'bg-zinc-700'}`}
-                  >
-                    <span className={`block h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] transition-transform duration-200 ease-out ${source.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                    <Power className="sr-only" />
-                  </button>
-                  <div className="min-w-0 flex-1 text-right text-xs text-zinc-500">
-                    <p className="flex items-center justify-end gap-1">
-                      <Clock3 className="w-3 h-3" /> Last update: {source.last_import_at ? new Date(source.last_import_at).toLocaleString() : 'Pending'}
-                    </p>
-                    {source.last_import_status && (
-                      <span className={source.last_import_status === 'success' ? 'text-emerald-400' : 'text-red-400'}>
-                        {source.last_import_status === 'success' ? <CheckCircle className="inline w-3 h-3 mr-1" /> : <RefreshCw className="inline w-3 h-3 mr-1" />}
-                        {source.last_import_status}
-                      </span>
-                    )}
-                    {source.last_import_error && <p className="text-red-400 max-w-md">{source.last_import_error}</p>}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setError(null); refreshMutation.mutate(source.id) }}
-                    disabled={refreshMutation.isPending}
-                    aria-label={`Refresh ${source.name} now`}
-                    title="Update this source now"
-                    className="p-2 rounded-lg text-indigo-400 hover:bg-indigo-500/10 disabled:opacity-50 transition-colors"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${refreshMutation.isPending && refreshMutation.variables === source.id ? 'animate-spin' : ''}`} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(source)}
-                    aria-label={`Edit ${source.name}`}
-                    title="Edit source"
-                    className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(source.id, source.name)}
-                    disabled={deleteMutation.isPending}
-                    aria-label={`Delete ${source.name}`}
-                    title="Delete source and its channels and programmes"
-                    className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+        </form>
+      </section>
+
+      <section className="data-panel" aria-labelledby="sources-table-title">
+        <div className="table-panel-toolbar">
+          <div>
+            <h2 id="sources-table-title">Configured sources</h2>
+            <p className="font-mono">{filteredSources.length} of {sources.length} shown · status refreshes every 30 s</p>
           </div>
+          <div className="toolbar-filters">
+            <label className="search-field w-full sm:w-64">
+              <span className="sr-only">Search sources by name or URL</span>
+              <Search className="h-3.5 w-3.5" aria-hidden="true" />
+              <input
+                type="search"
+                className="input"
+                value={sourceSearch}
+                onChange={(event) => setSourceSearch(event.target.value)}
+                placeholder="Search name or URL"
+              />
+            </label>
+            <label className="w-full sm:w-48">
+              <span className="sr-only">Filter sources by status</span>
+              <select className="input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SourceStatusFilter)}>
+                <option value="all">All statuses</option>
+                <option value="healthy">Imported</option>
+                <option value="attention">Failed or awaiting import</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <LoadingState title="Loading sources" compact />
+        ) : isError ? (
+          <ResourceError title="Sources could not be loaded" message={errorMessage(sourcesError)} onRetry={() => refetch()} />
+        ) : sources.length === 0 ? (
+          <EmptyState
+            icon={Database}
+            title="No XMLTV sources configured"
+            message="Add a source above with its XMLTV URL. Channels and programmes become available in the EPG grid after the first import."
+          />
+        ) : filteredSources.length === 0 ? (
+          <EmptyState icon={Search} title="No sources match the current filters" message="Clear the search or choose All statuses.">
+            <button type="button" className="btn btn-secondary" onClick={() => { setSourceSearch(''); setStatusFilter('all') }}>Clear filters</button>
+          </EmptyState>
         ) : (
-          <div className="p-8 text-center text-sm text-zinc-500">{sourceSearch || statusFilter !== 'all' ? 'No sources match the current filters.' : 'No sources yet. Add one above to start importing XMLTV data.'}</div>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Source</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last import</th>
+                  <th scope="col" className="text-right">Channels</th>
+                  <th scope="col" className="text-right">Programmes</th>
+                  <th scope="col">Schedule</th>
+                  <th scope="col">Refresh</th>
+                  <th scope="col" className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSources.map((source) => {
+                  const health = sourceHealth(source)
+                  const toggling = activationMutation.isPending && activationMutation.variables?.source.id === source.id
+                  const refreshing = refreshMutation.isPending && refreshMutation.variables?.id === source.id
+                  return (
+                    <tr key={source.id}>
+                      <td className="min-w-[260px]">
+                        <span className="table-text font-semibold">{source.name}</span>
+                        {source.source_url && (
+                          <a href={source.source_url} target="_blank" rel="noreferrer" className="cell-sub data-link font-mono break-all">
+                            {source.source_url}
+                          </a>
+                        )}
+                      </td>
+                      <td>
+                        <span className={healthBadge[health]}>{healthLabel[health]}</span>
+                        {source.last_import_error && <span className="cell-sub text-error-text max-w-[320px]">{source.last_import_error}</span>}
+                      </td>
+                      <td><span className="table-text font-mono whitespace-nowrap">{formatTimestamp(source.last_import_at) ?? 'Never'}</span></td>
+                      <td className="text-right"><span className="table-text font-mono">{(source.channel_count ?? 0).toLocaleString()}</span></td>
+                      <td className="text-right"><span className="table-text font-mono">{(source.programme_count ?? 0).toLocaleString()}</span></td>
+                      <td>
+                        <span className="table-text font-mono whitespace-nowrap">every {formatInterval(source.refresh_interval_minutes)}</span>
+                        <span className="cell-sub font-mono">keep {source.history_days} d</span>
+                      </td>
+                      <td>
+                        <span className="switch-control">
+                          <button
+                            type="button"
+                            role="switch"
+                            className="switch"
+                            aria-checked={source.enabled}
+                            aria-label={`Scheduled refresh for ${source.name}`}
+                            title={source.enabled ? 'Disable scheduled refresh' : 'Enable scheduled refresh'}
+                            onClick={() => activationMutation.mutate({ source, enabled: !source.enabled })}
+                            disabled={toggling}
+                          />
+                          <span className="table-text">{source.enabled ? 'Enabled' : 'Disabled'}</span>
+                        </span>
+                      </td>
+                      <td>
+                        <div className="cell-actions">
+                          <button
+                            type="button"
+                            className="icon-button"
+                            onClick={() => refreshMutation.mutate(source)}
+                            disabled={refreshing}
+                            aria-label={`Refresh ${source.name} now`}
+                            title="Download and import now"
+                          >
+                            <RefreshCw className={`h-4 w-4${refreshing ? ' animate-spin' : ''}`} aria-hidden="true" />
+                          </button>
+                          <button type="button" className="icon-button" onClick={() => handleEdit(source)} aria-label={`Edit ${source.name}`} title="Edit source">
+                            <Pencil className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button is-danger"
+                            onClick={() => setDeleteTarget(source)}
+                            disabled={deleteMutation.isPending}
+                            aria-label={`Delete ${source.name}`}
+                            title="Delete source with its channels and programmes"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </section>
+
       <ConfirmDialog
-        open={deleteSourceId !== null}
+        open={deleteTarget !== null}
         title="Delete source?"
-        description={`Deleting ${deleteSourceName} also removes all of its channels and programmes. This action cannot be undone.`}
-        confirmLabel={deleteMutation.isPending ? 'Deleting...' : 'Delete source'}
+        description={`Deleting ${deleteTarget?.name ?? 'this source'} also removes all of its channels and programmes and drops them from outputs. This cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete source'}
         destructive
-        onCancel={() => { if (!deleteMutation.isPending) setDeleteSourceId(null) }}
+        busy={deleteMutation.isPending}
+        onCancel={() => { if (!deleteMutation.isPending) setDeleteTarget(null) }}
         onConfirm={() => {
-          if (deleteSourceId === null) return
-          setError(null)
-          deleteMutation.mutate(deleteSourceId)
-          setDeleteSourceId(null)
+          if (!deleteTarget) return
+          deleteMutation.mutate(deleteTarget, { onSettled: () => setDeleteTarget(null) })
         }}
       />
-    </div>
+    </>
   )
 }

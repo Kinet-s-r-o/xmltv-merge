@@ -1,134 +1,129 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Tv, ListVideo, Database, ArrowRight, Upload, CheckCircle } from 'lucide-react'
+import { ArrowRight, Database, Tv, Upload } from 'lucide-react'
 import { api } from '../api/client'
-import { LoadingPanel } from '../components/ui/LoadingPanel'
+import { PageHeader } from '../components/ui/PageHeader'
+import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
+import { formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
 
 export function Dashboard() {
-  const { data: sources, isLoading, isError, error, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
   })
+  const sources = data ?? []
 
-  const totalChannels = sources?.reduce((sum, s) => sum + (s.channel_count ?? 0), 0) ?? 0
-  const totalProgrammes = sources?.reduce((sum, s) => sum + (s.programme_count ?? 0), 0) ?? 0
-  const healthySources = sources?.filter((source) => source.enabled && source.last_import_status === 'success').length ?? 0
-  const attentionSources = sources?.filter((source) => source.enabled && source.last_import_status !== 'success').length ?? 0
-  const disabledSources = sources?.filter((source) => !source.enabled).length ?? 0
+  const totalChannels = sources.reduce((sum, s) => sum + (s.channel_count ?? 0), 0)
+  const totalProgrammes = sources.reduce((sum, s) => sum + (s.programme_count ?? 0), 0)
+  const healthy = sources.filter((source) => sourceHealth(source) === 'healthy').length
+  const failed = sources.filter((source) => sourceHealth(source) === 'failed').length
+  const pending = sources.filter((source) => sourceHealth(source) === 'pending').length
+  const disabled = sources.filter((source) => sourceHealth(source) === 'disabled').length
+  const latestImport = sources
+    .map((source) => source.last_import_at)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1)
+  const checkedAt = dataUpdatedAt ? formatTimestamp(new Date(dataUpdatedAt).toISOString()) : null
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Dashboard</h1>
-        <p className="text-sm text-zinc-400 mt-1">Overview of your EPG data</p>
-      </div>
+    <>
+      <PageHeader
+        title="Feed health"
+        description="Import state, freshness and guide coverage of every XMLTV source. Sources that failed or never imported need action on the Sources page."
+      >
+        <Link to="/epg" className="btn btn-secondary"><Tv className="h-3.5 w-3.5" aria-hidden="true" /> Open EPG grid</Link>
+        <Link to="/sources" className="btn btn-primary"><Database className="h-3.5 w-3.5" aria-hidden="true" /> Manage sources</Link>
+      </PageHeader>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={CheckCircle}
-          label="Sources"
-          value={sources?.length ?? 0}
-          color="text-indigo-400"
-        />
-        <StatCard
-          icon={Database}
-          label="Healthy sources"
-          value={healthySources}
-          color="text-emerald-400"
-        />
-        <StatCard
-          icon={ListVideo}
-          label="Channels"
-          value={totalChannels}
-          color="text-emerald-400"
-        />
-        <StatCard
-          icon={Tv}
-          label="Programmes"
-          value={totalProgrammes}
-          color="text-amber-400"
-        />
-      </div>
-
-      {sources && sources.length > 0 && (
-        <div role="status" aria-atomic="true" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-xs text-zinc-400">
-          <span className="font-medium text-zinc-300">Feed health</span>
-          <span className="text-emerald-400">{healthySources} healthy</span>
-          <span className="text-amber-400">{attentionSources} need attention</span>
-          <span className="text-zinc-500">{disabledSources} disabled</span>
-          {attentionSources > 0 && <Link to="/sources" className="ml-auto min-h-11 inline-flex items-center text-indigo-300 hover:text-indigo-200">Review sources <ArrowRight className="ml-1 h-3 w-3" /></Link>}
-        </div>
+      {!isLoading && !isError && (
+        <dl className="ops-register" aria-label="Source and guide totals">
+          <div className="ops-register-cell">
+            <dt>Sources</dt>
+            <dd>{sources.length.toLocaleString()}</dd>
+            <small>{checkedAt ? <>Checked <span className="font-mono">{checkedAt}</span></> : 'Not checked yet'}</small>
+          </div>
+          <div className={`ops-register-cell${healthy > 0 ? ' is-online' : ''}`}>
+            <dt>Imported</dt>
+            <dd>{healthy.toLocaleString()}</dd>
+            <small>{latestImport ? <>Latest <span className="font-mono">{formatTimestamp(latestImport)}</span></> : 'No import finished yet'}</small>
+          </div>
+          <div className={`ops-register-cell${failed > 0 ? ' is-offline' : ''}`}>
+            <dt>Import failed</dt>
+            <dd>{failed.toLocaleString()}</dd>
+            <small>{failed > 0 ? 'Check the error on Sources' : 'No failing source'}</small>
+          </div>
+          <div className={`ops-register-cell${pending > 0 ? ' is-warning' : ''}`}>
+            <dt>Awaiting import</dt>
+            <dd>{pending.toLocaleString()}</dd>
+            <small>{disabled > 0 ? `${disabled} disabled, not refreshed` : 'Enabled, first run queued'}</small>
+          </div>
+          <div className="ops-register-cell">
+            <dt>Channels</dt>
+            <dd>{totalChannels.toLocaleString()}</dd>
+            <small>Across all sources</small>
+          </div>
+          <div className="ops-register-cell">
+            <dt>Programmes</dt>
+            <dd>{totalProgrammes.toLocaleString()}</dd>
+            <small>Stored within history windows</small>
+          </div>
+        </dl>
       )}
 
-      {/* Sources Table */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl">
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-zinc-300">Sources</h2>
-          <Link to="/sources" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-            Manage <ArrowRight className="w-3 h-3" />
-          </Link>
+      <section className="data-panel" aria-labelledby="dashboard-sources-title">
+        <div className="table-panel-toolbar">
+          <div>
+            <h2 id="dashboard-sources-title">Source import status</h2>
+            <p>Last import result and stored guide data per source</p>
+          </div>
+          <Link to="/sources" className="btn btn-secondary btn-xs">Manage <ArrowRight className="h-3 w-3" aria-hidden="true" /></Link>
         </div>
         {isLoading ? (
-          <LoadingPanel label="Loading sources" compact />
+          <LoadingState title="Loading source status" compact />
         ) : isError ? (
-          <div role="alert" className="flex flex-wrap items-center justify-center gap-3 p-6 text-sm text-red-300">
-            <span>Could not load sources: {(error as Error).message}</span>
-            <button type="button" onClick={() => refetch()} className="min-h-11 rounded-lg bg-zinc-800 px-3 py-2 text-zinc-200 hover:bg-zinc-700">Retry</button>
-          </div>
-        ) : sources && sources.length > 0 ? (
-          <div className="divide-y divide-zinc-800">
-            {sources.map((s) => (
-              <div key={s.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`h-2 w-2 shrink-0 rounded-full ${s.enabled && s.last_import_status === 'success' ? 'bg-emerald-400' : s.enabled ? 'bg-amber-400' : 'bg-zinc-500'}`} aria-hidden="true" />
-                  <div>
-                    <p className="text-sm font-medium text-zinc-200">{s.name}</p>
-                    <p className="text-xs text-zinc-500">
-                      {s.channel_count} channels · {s.programme_count} programmes
-                    </p>
-                  </div>
-                </div>
-                <div className="ml-auto min-w-[150px] text-right">
-                  <p className={`text-xs font-medium ${s.enabled && s.last_import_status === 'success' ? 'text-emerald-400' : s.enabled ? 'text-amber-400' : 'text-zinc-500'}`}>
-                    {!s.enabled ? 'Disabled' : s.last_import_status === 'success' ? 'Healthy' : s.last_import_status === 'error' ? 'Error' : 'Pending'}
-                  </p>
-                  <p className="text-xs text-zinc-400">
-                    {s.last_import_at ? new Date(s.last_import_at).toLocaleString() : 'Never imported'}
-                  </p>
-                  {s.last_import_status && (
-                    <span className={`text-xs ${s.last_import_status === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {s.last_import_status}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <ResourceError title="Source status could not be loaded" message={errorMessage(error)} onRetry={() => refetch()} />
+        ) : sources.length === 0 ? (
+          <EmptyState
+            icon={Upload}
+            title="No XMLTV sources configured"
+            message="Add an XMLTV URL on the Sources page. The first import starts right away; channel and programme totals appear here once it finishes."
+          >
+            <Link to="/sources" className="btn btn-primary"><Database className="h-3.5 w-3.5" aria-hidden="true" /> Add a source</Link>
+          </EmptyState>
         ) : (
-          <div className="p-6 text-center">
-            <Upload className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-            <p className="text-sm text-zinc-500">No sources yet. Import an XML file to get started.</p>
-            <Link to="/sources" className="text-xs text-indigo-400 hover:text-indigo-300 mt-2 inline-block">
-              Go to Sources →
-            </Link>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Source</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="text-right">Channels</th>
+                  <th scope="col" className="text-right">Programmes</th>
+                  <th scope="col">Last import</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sources.map((source) => {
+                  const health = sourceHealth(source)
+                  return (
+                    <tr key={source.id}>
+                      <td>
+                        <span className="table-text font-semibold">{source.name}</span>
+                        {source.last_import_error && <span className="cell-sub text-error-text">{source.last_import_error}</span>}
+                      </td>
+                      <td><span className={healthBadge[health]}>{healthLabel[health]}</span></td>
+                      <td className="text-right"><span className="table-text font-mono">{(source.channel_count ?? 0).toLocaleString()}</span></td>
+                      <td className="text-right"><span className="table-text font-mono">{(source.programme_count ?? 0).toLocaleString()}</span></td>
+                      <td><span className="table-text font-mono whitespace-nowrap">{formatTimestamp(source.last_import_at) ?? 'Never'}</span></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
-    </div>
-  )
-}
-
-function StatCard({ icon: Icon, label, value, color }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number; color: string }) {
-  return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-      <div className="flex items-center gap-3">
-        <Icon className={`w-5 h-5 ${color}`} />
-        <div>
-          <p className="text-2xl font-bold text-zinc-100">{value.toLocaleString()}</p>
-          <p className="text-xs text-zinc-500">{label}</p>
-        </div>
-      </div>
-    </div>
+      </section>
+    </>
   )
 }

@@ -24,16 +24,20 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     if (!this.state.hasError) return this.props.children
 
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 p-6 text-zinc-100">
-        <section role="alert" className="w-full max-w-lg rounded-2xl border border-red-500/20 bg-zinc-900 p-6 text-center shadow-xl">
-          <AlertTriangle className="mx-auto h-10 w-10 text-red-400" aria-hidden="true" />
-          <h1 className="mt-4 text-xl font-semibold">Something went wrong</h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">The page could not be rendered. Try reloading it or return to the dashboard.</p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <button type="button" onClick={() => window.location.reload()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500">
-              <RefreshCw className="h-4 w-4" /> Reload page
-            </button>
-            <a href="/" className="inline-flex min-h-11 items-center rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800">Go to dashboard</a>
+      <main className="app-loader p-4">
+        <section className="data-panel w-full max-w-lg">
+          <div role="alert" className="resource-state is-error">
+            <div className="resource-state-icon" aria-hidden="true">
+              <AlertTriangle className="h-[22px] w-[22px]" />
+            </div>
+            <strong>The EPG console could not render this page</strong>
+            <p>An unexpected client error stopped the view. Stored sources, channels and outputs are not affected. Reload the page, or return to the dashboard and open the section again.</p>
+            <div className="resource-state-actions">
+              <button type="button" onClick={() => window.location.reload()} className="btn btn-primary">
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Reload page
+              </button>
+              <a href="/" className="btn btn-secondary">Go to dashboard</a>
+            </div>
           </div>
         </section>
       </main>

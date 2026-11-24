@@ -1,0 +1,31 @@
+# Kinet UI/UX — agent configuration (OpenAI-compatible harnesses).
+# Declares the skill's activation contract for agents that read agents/openai.yaml.
+name: kinet-ui-ux
+description: >
+  Authoritative design reference for internal Kinet applications. Use when
+  building, reviewing, or extending any Kinet internal UI: layout, components,
+  tokens, charts, and accessibility. Extracted from the Kinet control plane.
+instructions: |
+  1. Read SKILL.md first; follow its progressive-disclosure table.
+  2. Copy examples/base.css as the CSS foundation; use the component examples
+     in examples/components/ as reference implementations.
+  3. Use only semantic tokens from assets/tokens.json; never raw hex in UI CSS.
+  4. Enforce the hard rules in SKILL.md (no Inter, no purple, no native dialogs,
+     no inline styles, 3px control radius, 44px mobile touch targets).
+  5. Run scripts/validate-design.mjs against the frontend source before
+     declaring a UI change complete.
+  6. Do not invent design values. If a value is not in the tokens or
+     references, mark it as a decision requiring human approval.
+entry: SKILL.md
+references:
+  - references/tokens.md
+  - references/components.md
+  - references/layout.md
+  - references/charts.md
+  - references/validation.md
+  - references/design-inventory.md
+  - references/ambiguity-report.md
+assets:
+  - assets/tokens.json
+scripts:
+  - scripts/validate-design.mjs

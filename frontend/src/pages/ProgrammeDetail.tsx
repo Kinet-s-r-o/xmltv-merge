@@ -1,9 +1,10 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { ArrowLeft, MapPin, Calendar, Film, RefreshCw, Tv } from 'lucide-react'
+import { ArrowLeft, SearchX, Tv } from 'lucide-react'
 import { api } from '../api/client'
-import { LoadingPanel } from '../components/ui/LoadingPanel'
+import { PageHeader } from '../components/ui/PageHeader'
+import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 
 export function ProgrammeDetail() {
   const { id } = useParams<{ id: string }>()
@@ -19,107 +20,143 @@ export function ProgrammeDetail() {
     enabled: validProgrammeId,
   })
 
-  if (isLoading) {
-    return <div className="p-6"><LoadingPanel label="Loading programme" /></div>
+  const backButton = (
+    <button type="button" onClick={() => navigate(backTo)} className="btn btn-secondary">
+      <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to EPG grid
+    </button>
+  )
+
+  if (validProgrammeId && isLoading) {
+    return (
+      <>
+        <PageHeader title="Programme detail">{backButton}</PageHeader>
+        <section className="data-panel"><LoadingState title="Loading programme" /></section>
+      </>
+    )
   }
 
   if (!validProgrammeId || isError || !programme) {
     return (
-      <div className="space-y-4 p-6">
-        <button type="button" onClick={() => navigate(backTo)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
-          <ArrowLeft className="h-4 w-4" /> Back to EPG
-        </button>
-        <div role={isError ? 'alert' : undefined} className="rounded-xl border border-dashed border-zinc-800 p-8 text-center">
-          <p className="text-sm text-zinc-300">{isError ? `Could not load programme: ${(error as Error).message}` : 'Programme not found.'}</p>
-          {isError && <button type="button" onClick={() => refetch()} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700"><RefreshCw className="h-4 w-4" /> Retry</button>}
-        </div>
-      </div>
+      <>
+        <PageHeader title="Programme detail">{backButton}</PageHeader>
+        <section className="data-panel">
+          {isError ? (
+            <ResourceError title="Programme could not be loaded" message={errorMessage(error)} onRetry={() => refetch()} />
+          ) : (
+            <EmptyState
+              icon={SearchX}
+              title="Programme not found"
+              message={`No stored programme has ID ${id ?? ''}. It may have ended and been removed by the source history cleanup.`}
+            />
+          )}
+        </section>
+      </>
     )
   }
 
-  const primaryTitle = programme.titles?.[0]?.title || programme.subtitle || 'Untitled'
+  const primaryTitle = programme.titles?.[0]?.title || programme.subtitle || 'Untitled programme'
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Back */}
-      <button type="button" onClick={() => navigate(backTo)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
-        <ArrowLeft className="w-4 h-4" /> Back
-      </button>
+    <>
+      <PageHeader
+        title={primaryTitle}
+        description={<span className="font-mono">{format(new Date(programme.start_time), 'yyyy-MM-dd HH:mm')}–{format(new Date(programme.stop_time), 'HH:mm')}{programme.channel?.name ? ` · ${programme.channel.name}` : ''}</span>}
+      >
+        {backButton}
+      </PageHeader>
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:flex-row sm:p-5">
-        {programme.icon_url && (
-          <img src={programme.icon_url} alt="" className="h-32 w-24 shrink-0 rounded-lg object-cover" />
-        )}
-        {!programme.icon_url && <div className="flex h-32 w-24 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-zinc-500"><Tv className="h-8 w-8" aria-hidden="true" /></div>}
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold text-zinc-100">{primaryTitle}</h1>
-          <div className="mt-3 grid gap-2 text-sm text-zinc-400 sm:grid-cols-2">
-            <span className="flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5" />
-              {format(new Date(programme.start_time), 'EEE, MMM d · HH:mm')} – {format(new Date(programme.stop_time), 'HH:mm')}
-            </span>
-            {programme.country && (
-              <span className="flex items-center gap-2">
-                <MapPin className="w-3.5 h-3.5" /> {programme.country}
-              </span>
-            )}
-            {programme.year && (
-              <span className="flex items-center gap-2">
-                <Film className="w-3.5 h-3.5" /> {programme.year}
-              </span>
-            )}
-          </div>
-          {programme.channel && <p className="mt-3 flex items-center gap-2 text-xs text-zinc-500"><Tv className="h-3.5 w-3.5" /> {programme.channel.name} · source {programme.source_id}</p>}
-          {programme.categories && programme.categories.length > 0 && (
-            <div className="flex gap-2 mt-3">
-              {programme.categories.map((c) => (
-                <span key={c.id} className="px-2 py-0.5 text-xs bg-indigo-500/10 text-indigo-300 rounded-full">
-                  {c.category}
-                </span>
-              ))}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+        <section className="data-panel" aria-labelledby="programme-description-title">
+          <div className="data-panel-header">
+            <div>
+              <h2 id="programme-description-title">Description</h2>
+              {programme.description_lang && <p className="font-mono">lang={programme.description_lang}</p>}
             </div>
-          )}
-        </div>
+          </div>
+          <div className="data-panel-body flex flex-col gap-4 sm:flex-row">
+            {programme.icon_url
+              ? <img src={programme.icon_url} alt="" className="poster" />
+              : <span className="poster" aria-hidden="true"><Tv className="h-[22px] w-[22px]" /></span>}
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              {programme.categories && programme.categories.length > 0 && (
+                <ul className="flex flex-wrap gap-2" aria-label="Categories">
+                  {programme.categories.map((category) => <li key={category.id} className="chip">{category.category}</li>)}
+                </ul>
+              )}
+              {programme.description
+                ? <p className="prose-text">{programme.description}</p>
+                : <p className="text-[12px] text-muted">The XMLTV source provides no description for this programme.</p>}
+            </div>
+          </div>
+        </section>
+
+        <section className="data-panel" aria-labelledby="programme-meta-title">
+          <div className="data-panel-header">
+            <div>
+              <h2 id="programme-meta-title">Programme metadata</h2>
+              <p>Values as stored from the XMLTV source</p>
+            </div>
+          </div>
+          <div className="data-panel-body">
+            <dl className="meta-list">
+              <dt>Channel</dt><dd>{programme.channel?.name ?? `Channel #${programme.channel_id}`}</dd>
+              <dt>Source ID</dt><dd className="font-mono">{programme.source_id}</dd>
+              <dt>Start</dt><dd className="font-mono">{format(new Date(programme.start_time), 'yyyy-MM-dd HH:mm')}</dd>
+              <dt>Stop</dt><dd className="font-mono">{format(new Date(programme.stop_time), 'yyyy-MM-dd HH:mm')}</dd>
+              {programme.subtitle && <><dt>Episode title</dt><dd>{programme.subtitle}</dd></>}
+              {programme.episode_num && <><dt>Episode</dt><dd className="font-mono">{programme.episode_num}{programme.episode_num_system ? ` (${programme.episode_num_system})` : ''}</dd></>}
+              {programme.country && <><dt>Country</dt><dd>{programme.country}</dd></>}
+              {programme.year && <><dt>Year</dt><dd className="font-mono">{programme.year}</dd></>}
+            </dl>
+          </div>
+        </section>
       </div>
 
-      {/* Description */}
-      {programme.description && (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-          <h2 className="text-sm font-medium text-zinc-300 mb-2">Description</h2>
-          <p className="text-sm text-zinc-400 leading-relaxed">{programme.description}</p>
-        </div>
-      )}
-
-      {/* Credits */}
       {programme.credits && programme.credits.length > 0 && (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-          <h2 className="text-sm font-medium text-zinc-300 mb-3">Credits</h2>
-          <div className="space-y-2">
-            {programme.credits.map((c) => (
-              <div key={c.id} className="flex items-center gap-2 text-sm">
-                <span className="text-zinc-500 w-20 capitalize">{c.type}</span>
-                <span className="text-zinc-300">{c.name}</span>
-              </div>
-            ))}
+        <section className="data-panel" aria-labelledby="programme-credits-title">
+          <div className="table-panel-toolbar">
+            <div>
+              <h2 id="programme-credits-title">Credits</h2>
+              <p className="font-mono">{programme.credits.length} entries</p>
+            </div>
           </div>
-        </div>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th scope="col">Role</th><th scope="col">Name</th></tr></thead>
+              <tbody>
+                {programme.credits.map((credit) => (
+                  <tr key={credit.id}>
+                    <td><span className="table-text capitalize">{credit.type}</span></td>
+                    <td><span className="table-text">{credit.name}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
-      {/* All Titles */}
       {programme.titles && programme.titles.length > 1 && (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-          <h2 className="text-sm font-medium text-zinc-300 mb-3">Titles</h2>
-          <div className="space-y-1">
-            {programme.titles.map((t) => (
-              <div key={t.id} className="flex items-center gap-2 text-sm">
-                <span className="text-zinc-500 w-8">{t.lang}</span>
-                <span className="text-zinc-300">{t.title}</span>
-              </div>
-            ))}
+        <section className="data-panel" aria-labelledby="programme-titles-title">
+          <div className="table-panel-toolbar">
+            <div>
+              <h2 id="programme-titles-title">Titles by language</h2>
+              <p className="font-mono">{programme.titles.length} variants</p>
+            </div>
           </div>
-        </div>
+          <table className="data-table">
+            <thead><tr><th scope="col">Language</th><th scope="col">Title</th></tr></thead>
+            <tbody>
+              {programme.titles.map((title) => (
+                <tr key={title.id}>
+                  <td><span className="table-text font-mono">{title.lang || '—'}</span></td>
+                  <td><span className="table-text">{title.title}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
       )}
-    </div>
+    </>
   )
 }

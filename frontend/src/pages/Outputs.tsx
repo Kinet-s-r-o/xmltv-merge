@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Clipboard, Download, Layers3, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { Clipboard, Download, Layers3, ListVideo, Plus, Save, Search, Trash2, X } from 'lucide-react'
 import { api, Channel, OutputChannel } from '../api/client'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
-import { LoadingPanel } from '../components/ui/LoadingPanel'
+import { useFeedback } from '../components/ui/Feedback'
+import { PageHeader } from '../components/ui/PageHeader'
+import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 
 const defaultItems = (): Omit<OutputChannel, 'channel_id' | 'display_name'> => ({
   include_title: true, include_subtitle: true, include_description: true, include_credits: true,
@@ -25,31 +27,64 @@ const outputSnapshot = (name: string, channels: OutputChannel[]) => JSON.stringi
 
 export function Outputs() {
   const queryClient = useQueryClient()
+  const { notify } = useFeedback()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [draftName, setDraftName] = useState('')
   const [draftChannels, setDraftChannels] = useState<OutputChannel[]>([])
   const [channelSearch, setChannelSearch] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [copied, setCopied] = useState(false)
   const [savedSnapshot, setSavedSnapshot] = useState('')
-  const { data: outputData, isLoading } = useQuery({ queryKey: ['outputs'], queryFn: api.outputs })
+  const { data: outputData, isLoading, isError, error, refetch } = useQuery({ queryKey: ['outputs'], queryFn: api.outputs })
   const { data: channelData } = useQuery({ queryKey: ['channels'], queryFn: () => api.channels() })
   const { data: sourceData } = useQuery({ queryKey: ['sources'], queryFn: api.sources })
   const outputs = outputData ?? []
-  const channels = channelData ?? []
-  const sources = sourceData ?? []
+  const channels = useMemo(() => channelData ?? [], [channelData])
+  const sources = useMemo(() => sourceData ?? [], [sourceData])
   const sourceNames = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
+  const channelsById = useMemo(() => new Map(channels.map((channel) => [channel.id, channel])), [channels])
   const selected = outputs.find((output) => output.id === selectedId)
   const publicFeedUrl = selected ? `${window.location.origin}/feeds/${selected.slug}.xml?token=${selected.public_token}` : ''
 
   const openOutput = async (id: number) => {
-    try { const output = await api.output(id); setSelectedId(id); setDraftName(output.name); setDraftChannels(output.channels ?? []); setSavedSnapshot(outputSnapshot(output.name, output.channels ?? [])); setError(null) }
-    catch (err) { setError((err as Error).message) }
+    try {
+      const output = await api.output(id)
+      setSelectedId(id)
+      setDraftName(output.name)
+      setDraftChannels(output.channels ?? [])
+      setSavedSnapshot(outputSnapshot(output.name, output.channels ?? []))
+      setCopied(false)
+    } catch (err) {
+      notify({ tone: 'error', title: 'Output could not be opened', message: (err as Error).message })
+    }
   }
-  const createMutation = useMutation({ mutationFn: () => api.addOutput('New output'), onSuccess: async ({ id }) => { await queryClient.invalidateQueries({ queryKey: ['outputs'] }); openOutput(id) }, onError: (err: Error) => setError(err.message) })
-  const saveMutation = useMutation({ mutationFn: () => api.updateOutput(selectedId!, { name: draftName.trim(), channels: draftChannels }), onSuccess: async () => { setSavedSnapshot(outputSnapshot(draftName.trim(), draftChannels)); await queryClient.invalidateQueries({ queryKey: ['outputs'] }); setError(null) }, onError: (err: Error) => setError(err.message) })
-  const deleteMutation = useMutation({ mutationFn: () => api.deleteOutput(selectedId!), onSuccess: async () => { setSelectedId(null); await queryClient.invalidateQueries({ queryKey: ['outputs'] }) }, onError: (err: Error) => setError(err.message) })
+  const createMutation = useMutation({
+    mutationFn: () => api.addOutput('New output'),
+    onSuccess: async ({ id }) => {
+      await queryClient.invalidateQueries({ queryKey: ['outputs'] })
+      notify({ tone: 'success', title: 'Output created', message: 'Rename it, choose channels and save to publish the feed.' })
+      openOutput(id)
+    },
+    onError: (err: Error) => notify({ tone: 'error', title: 'Output was not created', message: err.message }),
+  })
+  const saveMutation = useMutation({
+    mutationFn: () => api.updateOutput(selectedId!, { name: draftName.trim(), channels: draftChannels }),
+    onSuccess: async () => {
+      setSavedSnapshot(outputSnapshot(draftName.trim(), draftChannels))
+      await queryClient.invalidateQueries({ queryKey: ['outputs'] })
+      notify({ tone: 'success', title: 'Output saved', message: `${draftName.trim()} now publishes ${draftChannels.length} channels.` })
+    },
+    onError: (err: Error) => notify({ tone: 'error', title: 'Changes were not saved', message: err.message }),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteOutput(selectedId!),
+    onSuccess: async () => {
+      notify({ tone: 'success', title: 'Output deleted', message: `${selected?.name ?? 'The output'} and its feed URL no longer exist.` })
+      setSelectedId(null)
+      await queryClient.invalidateQueries({ queryKey: ['outputs'] })
+    },
+    onError: (err: Error) => notify({ tone: 'error', title: 'Output was not deleted', message: err.message }),
+  })
 
   const selectedChannelIds = useMemo(() => new Set(draftChannels.map((channel) => channel.channel_id)), [draftChannels])
   const filteredChannels = useMemo(() => {
@@ -60,6 +95,7 @@ export function Outputs() {
     if (selectedChannelIds.has(channel.id)) setDraftChannels((current) => current.filter((item) => item.channel_id !== channel.id))
     else setDraftChannels((current) => [...current, { channel_id: channel.id, display_name: channel.name, ...defaultItems(), channel }])
   }
+  const removeChannel = (channelId: number) => setDraftChannels((current) => current.filter((item) => item.channel_id !== channelId))
   const selectVisibleChannels = () => {
     const missing = filteredChannels.filter((channel) => !selectedChannelIds.has(channel.id))
     if (missing.length === 0) return
@@ -73,27 +109,226 @@ export function Outputs() {
   const applyPreset = (preset: 'full' | 'minimal') => setDraftChannels((current) => current.map((item) => ({ ...item, ...(preset === 'full' ? defaultItems() : minimalItems()) })))
   const isDirty = Boolean(selected) && outputSnapshot(draftName, draftChannels) !== savedSnapshot
 
-  return <>
-  <div className="p-6 space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-2xl font-bold text-zinc-100">Outputs</h1><p className="mt-1 text-sm text-zinc-400">Build aggregated XMLTV feeds from channels across your sources.</p></div>
-      <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"><Plus className="h-4 w-4" /> Add output</button>
-    </div>
-    {error && <div role="alert" aria-live="assertive" className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300"><span>{error}</span><button onClick={() => setError(null)} aria-label="Dismiss error" className="rounded p-1 hover:bg-red-500/10"><X className="h-4 w-4" /></button></div>}
-    {isLoading ? <div className="rounded-xl border border-zinc-800 bg-zinc-900/50"><LoadingPanel label="Loading outputs" /></div> : <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-2">
-        <div className="px-3 py-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Configured feeds</div>
-        {outputs.length === 0 ? <div className="p-4 text-sm text-zinc-500">No outputs yet. Create one to start aggregating channels.</div> : outputs.map((output) => <button key={output.id} onClick={() => openOutput(output.id)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors ${output.id === selectedId ? 'bg-indigo-500/10 text-indigo-200' : 'text-zinc-300 hover:bg-zinc-800/70'}`}><Layers3 className="h-4 w-4 shrink-0" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{output.name}</span><span className="block text-xs text-zinc-500">{output.channel_count} channels · /{output.slug}.xml</span></span><Pencil className="h-3.5 w-3.5 text-zinc-500" /></button>)}
-      </section>
-      {!selected ? <section className="flex min-h-[420px] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 p-8 text-center"><div><Layers3 className="mx-auto mb-3 h-8 w-8 text-zinc-600" /><p className="text-sm text-zinc-400">Select an output to configure it.</p></div></section> : <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"><label className="min-w-[240px] flex-1 text-xs text-zinc-400">Output name<input value={draftName} onChange={(event) => setDraftName(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 focus:border-indigo-500/50 focus:outline-none" /></label><div className="flex items-center gap-2"><span className={`hidden text-xs sm:inline ${isDirty ? 'text-amber-400' : 'text-zinc-500'}`}>{isDirty ? 'Unsaved changes' : 'All changes saved'}</span><button onClick={() => setConfirmDelete(true)} className="min-h-11 rounded-lg p-2 text-red-400 hover:bg-red-500/10" title="Delete output" aria-label="Delete output"><Trash2 className="h-4 w-4" /></button><a href={`/api/v1/outputs/${selected.id}/xml`} target="_blank" rel="noreferrer" className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"><Download className="h-4 w-4" /> XML</a><button onClick={() => saveMutation.mutate()} disabled={!draftName.trim() || saveMutation.isPending || !isDirty} className="flex min-h-11 items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"><Save className="h-4 w-4" /> {saveMutation.isPending ? 'Saving...' : 'Save changes'}</button></div><label className="w-full text-xs text-zinc-500">Customer feed URL<div className="mt-1 flex gap-2"><input readOnly value={publicFeedUrl} aria-label="Customer feed URL" className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400" /><button onClick={async () => { await navigator.clipboard.writeText(publicFeedUrl); setCopied(true); window.setTimeout(() => setCopied(false), 2000) }} className="min-h-11 rounded-lg border border-zinc-700 px-3 text-zinc-300 hover:bg-zinc-800" title="Copy feed URL" aria-label="Copy customer feed URL"><Clipboard className="h-4 w-4" /> <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span></button><span className="sr-only" aria-live="polite">{copied ? 'Feed URL copied' : ''}</span></div></label></div>
-        <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50"><div className="border-b border-zinc-800 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-sm font-medium text-zinc-200">Channels <span className="text-zinc-500">({draftChannels.length})</span></h2><div className="flex flex-wrap gap-1"><button type="button" onClick={selectVisibleChannels} className="rounded px-2 py-1 text-[11px] text-indigo-300 hover:bg-indigo-500/10">Select visible</button><button type="button" onClick={clearVisibleChannels} className="rounded px-2 py-1 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">Clear visible</button><button type="button" onClick={() => applyPreset('full')} className="rounded px-2 py-1 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">All fields</button><button type="button" onClick={() => applyPreset('minimal')} className="rounded px-2 py-1 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">Minimal</button></div></div><p className="mt-1 text-xs text-zinc-500">Choose stations from any source.</p><label className="relative mt-3 block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" /><input type="search" value={channelSearch} onChange={(event) => setChannelSearch(event.target.value)} placeholder="Search channels..." className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:outline-none" /></label></div><div className="max-h-[560px] divide-y divide-zinc-800 overflow-y-auto">{filteredChannels.map((channel) => <button key={channel.id} onClick={() => toggleChannel(channel)} className="flex w-full items-center gap-3 p-3 text-left hover:bg-zinc-800/50"><span className={`flex h-5 w-5 items-center justify-center rounded border ${selectedChannelIds.has(channel.id) ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-zinc-700 text-transparent'}`}><Check className="h-3.5 w-3.5" /></span>{channel.icon_url ? <img src={channel.icon_url} alt="" className="h-7 w-7 rounded object-contain" /> : <span className="flex h-7 w-7 items-center justify-center rounded bg-zinc-800 text-xs text-zinc-500">{channel.name[0]}</span>}<span className="min-w-0 flex-1"><span className="block truncate text-sm text-zinc-200">{channel.name}</span><span className="block truncate text-xs text-zinc-500">{sourceNames.get(channel.source_id) ?? 'Unknown source'} · {channel.external_id}</span></span></button>)}{channels.length === 0 ? <div className="p-5 text-sm text-zinc-500">Add and import a source first.</div> : filteredChannels.length === 0 && <div className="p-5 text-sm text-zinc-500">No channels match this search.</div>}</div></div>
-          <div className="space-y-3">{draftChannels.length === 0 ? <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500">Selected channels will appear here with their output rules.</div> : draftChannels.map((item) => <div key={item.channel_id} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"><div className="flex flex-wrap items-center gap-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-zinc-200">{item.channel?.name ?? channels.find((channel) => channel.id === item.channel_id)?.name}</p><p className="text-xs text-zinc-500">{sourceNames.get(item.channel?.source_id ?? channels.find((channel) => channel.id === item.channel_id)?.source_id ?? 0) ?? 'Unknown source'} · {item.channel?.external_id ?? channels.find((channel) => channel.id === item.channel_id)?.external_id ?? ''}</p></div><button onClick={() => toggleChannel(item.channel ?? channels.find((channel) => channel.id === item.channel_id)!)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"><X className="h-4 w-4" /></button></div><label className="mt-3 block text-xs text-zinc-400">Output station name<input value={item.display_name} onChange={(event) => updateChannel(item.channel_id, { display_name: event.target.value })} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 focus:border-indigo-500/50 focus:outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{itemLabels.map(([key, label]) => <label key={key} className="flex items-center gap-2 text-xs text-zinc-400"><input type="checkbox" checked={Boolean(item[key])} onChange={(event) => updateChannel(item.channel_id, { [key]: event.target.checked })} className="accent-indigo-500" />{label}</label>)}</div></div>)}</div>
+  const copyFeedUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(publicFeedUrl)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      notify({ tone: 'error', title: 'Feed URL was not copied', message: 'The browser blocked clipboard access. Select the URL field and copy it manually.' })
+    }
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Outputs"
+        description="Aggregated XMLTV feeds built from channels of any source. Each feed has a token-protected public URL for customers."
+      >
+        <button type="button" className="btn btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+          {createMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />} Add output
+        </button>
+      </PageHeader>
+
+      {isLoading ? (
+        <section className="data-panel"><LoadingState title="Loading outputs" /></section>
+      ) : isError ? (
+        <section className="data-panel"><ResourceError title="Outputs could not be loaded" message={errorMessage(error)} onRetry={() => refetch()} /></section>
+      ) : (
+        <div className="split-layout">
+          <section className="data-panel" aria-labelledby="output-list-title">
+            <div className="data-panel-header">
+              <div>
+                <h2 id="output-list-title">Configured feeds</h2>
+                <p className="font-mono">{outputs.length} outputs</p>
+              </div>
+            </div>
+            {outputs.length === 0 ? (
+              <EmptyState compact icon={Layers3} title="No outputs yet" message="Add an output to combine channels from your sources into one XMLTV feed." />
+            ) : (
+              <ul className="feed-list">
+                {outputs.map((output) => (
+                  <li key={output.id}>
+                    <button
+                      type="button"
+                      onClick={() => openOutput(output.id)}
+                      className={`feed-item${output.id === selectedId ? ' is-active' : ''}`}
+                      aria-current={output.id === selectedId ? 'true' : undefined}
+                    >
+                      <Layers3 className="h-4 w-4" aria-hidden="true" />
+                      <span className="feed-item-copy">
+                        <strong>{output.name}</strong>
+                        <span>{output.channel_count} ch · /{output.slug}.xml</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {!selected ? (
+            <section className="data-panel">
+              <EmptyState
+                icon={Layers3}
+                title="Select an output to configure it"
+                message={outputs.length === 0 ? 'Create the first output with Add output. Its feed URL appears here after you open it.' : 'Choose a feed on the left to edit its name, channels and included programme fields.'}
+              />
+            </section>
+          ) : (
+            <div className="flex min-w-0 flex-col gap-4">
+              <section className="data-panel" aria-labelledby="output-settings-title">
+                <div className="data-panel-header">
+                  <div>
+                    <h2 id="output-settings-title">Feed settings</h2>
+                    <p>{isDirty ? 'Unsaved changes — the public feed still serves the last saved version.' : 'All changes saved.'}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isDirty ? <span className="badge badge-warning">Unsaved</span> : <span className="badge badge-success">Saved</span>}
+                  </div>
+                </div>
+                <div className="data-panel-body flex flex-col gap-4">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="field min-w-[220px] flex-1">
+                      Output name
+                      <input className="input" value={draftName} onChange={(event) => setDraftName(event.target.value)} />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setConfirmDelete(true)} className="btn btn-danger">
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
+                      </button>
+                      <a href={`/api/v1/outputs/${selected.id}/xml`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+                        <Download className="h-3.5 w-3.5" aria-hidden="true" /> Preview XML
+                      </a>
+                      <button type="button" onClick={() => saveMutation.mutate()} disabled={!draftName.trim() || saveMutation.isPending || !isDirty} className="btn btn-primary">
+                        {saveMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Save className="h-3.5 w-3.5" aria-hidden="true" />}
+                        {saveMutation.isPending ? 'Saving…' : 'Save changes'}
+                      </button>
+                    </div>
+                  </div>
+                  <label className="field">
+                    Customer feed URL
+                    <span className="url-field">
+                      <input readOnly className="input" value={publicFeedUrl} onFocus={(event) => event.target.select()} />
+                      <button type="button" onClick={copyFeedUrl} className="btn btn-secondary" aria-label="Copy customer feed URL">
+                        <Clipboard className="h-3.5 w-3.5" aria-hidden="true" /> {copied ? 'Copied' : 'Copy'}
+                      </button>
+                    </span>
+                    <span className="field-hint">Contains the access token. Share it only with the customer that receives this feed.</span>
+                    <span className="sr-only" aria-live="polite">{copied ? 'Feed URL copied' : ''}</span>
+                  </label>
+                </div>
+              </section>
+
+              <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]">
+                <section className="data-panel" aria-labelledby="channel-picker-title">
+                  <div className="data-panel-header">
+                    <div>
+                      <h2 id="channel-picker-title">Available channels</h2>
+                      <p className="font-mono">{filteredChannels.length} shown · {draftChannels.length} selected</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <button type="button" className="btn btn-secondary btn-xs" onClick={selectVisibleChannels} disabled={filteredChannels.length === 0}>Select shown</button>
+                      <button type="button" className="btn btn-secondary btn-xs" onClick={clearVisibleChannels} disabled={filteredChannels.length === 0}>Clear shown</button>
+                    </div>
+                  </div>
+                  <div className="data-panel-body">
+                    <label className="search-field">
+                      <span className="sr-only">Search channels by name or XMLTV ID</span>
+                      <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                      <input type="search" className="input" value={channelSearch} onChange={(event) => setChannelSearch(event.target.value)} placeholder="Search name or XMLTV ID" />
+                    </label>
+                  </div>
+                  {channels.length === 0 ? (
+                    <EmptyState compact icon={ListVideo} title="No channels imported yet" message="Add a source and wait for its first import; its channels become selectable here." />
+                  ) : filteredChannels.length === 0 ? (
+                    <EmptyState compact icon={Search} title="No channels match this search" message="Search matches channel names and XMLTV IDs." />
+                  ) : (
+                    <ul className="picker-list" aria-label="Available channels">
+                      {filteredChannels.map((channel) => (
+                        <li key={channel.id}>
+                          <label className="picker-row">
+                            <input type="checkbox" className="checkbox" checked={selectedChannelIds.has(channel.id)} onChange={() => toggleChannel(channel)} />
+                            {channel.icon_url
+                              ? <img src={channel.icon_url} alt="" className="channel-logo" loading="lazy" />
+                              : <span className="channel-logo" aria-hidden="true">{channel.name.charAt(0).toUpperCase()}</span>}
+                            <span className="picker-row-copy">
+                              <strong>{channel.name}</strong>
+                              <span>{sourceNames.get(channel.source_id) ?? `Source #${channel.source_id}`} · <span className="font-mono">{channel.external_id}</span></span>
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section className="data-panel" aria-labelledby="channel-rules-title">
+                  <div className="data-panel-header">
+                    <div>
+                      <h2 id="channel-rules-title">Channels in this feed</h2>
+                      <p>Output station name and programme fields written to the XML</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <button type="button" className="btn btn-secondary btn-xs" onClick={() => applyPreset('full')} disabled={draftChannels.length === 0}>All fields</button>
+                      <button type="button" className="btn btn-secondary btn-xs" onClick={() => applyPreset('minimal')} disabled={draftChannels.length === 0}>Minimal</button>
+                    </div>
+                  </div>
+                  {draftChannels.length === 0 ? (
+                    <EmptyState compact icon={ListVideo} title="No channels in this feed" message="Tick channels in Available channels. Each one gets its own name and field rules here." />
+                  ) : (
+                    draftChannels.map((item) => {
+                      const channel = item.channel ?? channelsById.get(item.channel_id)
+                      const channelName = channel?.name ?? `Channel #${item.channel_id}`
+                      return (
+                        <div key={item.channel_id} className="data-panel-section">
+                          <div className="flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="m-0 truncate text-[13px] font-semibold">{channelName}</p>
+                              <p className="m-0 truncate text-[11px] text-muted">
+                                {sourceNames.get(channel?.source_id ?? 0) ?? 'Unknown source'} · <span className="font-mono">{channel?.external_id ?? ''}</span>
+                              </p>
+                            </div>
+                            <button type="button" className="icon-button" onClick={() => removeChannel(item.channel_id)} aria-label={`Remove ${channelName} from this output`} title="Remove from output">
+                              <X className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </div>
+                          <label className="field mt-3">
+                            Output station name
+                            <input className="input" value={item.display_name} onChange={(event) => updateChannel(item.channel_id, { display_name: event.target.value })} />
+                          </label>
+                          <fieldset className="mt-3 border-0 p-0">
+                            <legend className="mb-1 text-[11px] font-semibold text-secondary">Included programme fields</legend>
+                            <div className="rule-grid">
+                              {itemLabels.map(([key, label]) => (
+                                <label key={key} className="check-label">
+                                  <input type="checkbox" className="checkbox" checked={Boolean(item[key])} onChange={(event) => updateChannel(item.channel_id, { [key]: event.target.checked })} />
+                                  {label}
+                                </label>
+                              ))}
+                            </div>
+                          </fieldset>
+                        </div>
+                      )
+                    })
+                  )}
+                </section>
+              </div>
+            </div>
+          )}
         </div>
-      </section>}
-    </div>}
-  </div>
-  <ConfirmDialog open={confirmDelete} title="Delete output?" description={`Delete ${selected?.name ?? 'this output'} and its channel rules? This action cannot be undone.`} confirmLabel={deleteMutation.isPending ? 'Deleting...' : 'Delete output'} destructive onCancel={() => { if (!deleteMutation.isPending) setConfirmDelete(false) }} onConfirm={() => { deleteMutation.mutate(); setConfirmDelete(false) }} />
-  </>
+      )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete output?"
+        description={`Delete ${selected?.name ?? 'this output'} and its channel rules? Customers using its feed URL will get an error. This cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete output'}
+        destructive
+        busy={deleteMutation.isPending}
+        onCancel={() => { if (!deleteMutation.isPending) setConfirmDelete(false) }}
+        onConfirm={() => deleteMutation.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}
+      />
+    </>
+  )
 }

@@ -1,93 +1,212 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Tv, LayoutDashboard, ListVideo, Database, Menu, Moon, Sun, Layers3, X } from 'lucide-react'
+import { Outlet, NavLink, useLocation, matchPath } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronRight, Database, Layers3, LayoutDashboard, ListVideo, Menu, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Sun, Tv, Wifi, WifiOff, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { api } from '../../api/client'
+import { applyTheme, nextTheme, readThemePreference, type ThemePreference } from '../../lib/theme'
 
-function cn(...inputs: (string | undefined | null | false)[]) {
-  return twMerge(clsx(inputs))
+interface NavItem {
+  to: string
+  icon: LucideIcon
+  label: string
 }
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/epg', icon: Tv, label: 'EPG' },
-  { to: '/channels', icon: ListVideo, label: 'Channels' },
-  { to: '/sources', icon: Database, label: 'Sources' },
-  { to: '/outputs', icon: Layers3, label: 'Outputs' },
+const navGroups: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: 'Monitor',
+    items: [
+      { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/epg', icon: Tv, label: 'EPG grid' },
+      { to: '/channels', icon: ListVideo, label: 'Channels' },
+    ],
+  },
+  {
+    label: 'Configure',
+    items: [
+      { to: '/sources', icon: Database, label: 'Sources' },
+      { to: '/outputs', icon: Layers3, label: 'Outputs' },
+    ],
+  },
 ]
+
+const sectionTitles: Array<[string, string]> = [
+  ['/', 'Dashboard'],
+  ['/epg', 'EPG grid'],
+  ['/channels', 'Channels'],
+  ['/programmes/:id', 'Programme detail'],
+  ['/sources', 'Sources'],
+  ['/outputs', 'Outputs'],
+]
+
+const themeMeta: Record<ThemePreference, { icon: LucideIcon; label: string }> = {
+  dark: { icon: Moon, label: 'Dark theme' },
+  light: { icon: Sun, label: 'Light theme' },
+  system: { icon: Monitor, label: 'System theme' },
+}
+
+const COLLAPSE_KEY = 'xmltv-sidebar-collapsed'
+
+function readCollapsed() {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
 
 export function Layout() {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
-  const [lightMode, setLightMode] = useState(() => localStorage.getItem('xmltv-theme') === 'light')
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const [theme, setTheme] = useState<ThemePreference>(readThemePreference)
+  const [collapsed, setCollapsed] = useState(readCollapsed)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('light', lightMode)
-    localStorage.setItem('xmltv-theme', lightMode ? 'light' : 'dark')
-  }, [lightMode])
+  const { isError: serviceDown, isSuccess: serviceUp } = useQuery({
+    queryKey: ['health'],
+    queryFn: api.health,
+    refetchInterval: 30_000,
+    retry: 0,
+  })
 
   useEffect(() => {
-    mainRef.current?.focus()
+    applyTheme(theme)
+    if (theme !== 'system') return
+    const media = window.matchMedia('(prefers-color-scheme: light)')
+    const onChange = () => applyTheme('system')
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [theme])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSE_KEY, String(collapsed))
+    } catch {
+      // Preference is optional.
+    }
+  }, [collapsed])
+
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true })
+    setMobileNavOpen(false)
   }, [location.pathname])
 
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileNavOpen(false)
+        menuButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [mobileNavOpen])
+
+  const title = sectionTitles.find(([pattern]) => matchPath({ path: pattern, end: true }, location.pathname))?.[1] ?? 'XMLTV EPG'
+  const ThemeIcon = themeMeta[theme].icon
+  const upcomingTheme = themeMeta[nextTheme(theme)].label
+
   return (
-    <div className="flex min-h-screen overflow-hidden">
-      <a href="#main-content" className="sr-only z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
-        Skip to content
-      </a>
-      {mobileNavOpen && <button type="button" className="fixed inset-0 z-30 bg-black/60 md:hidden" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-zinc-800 bg-zinc-900/95 transition-transform duration-200 md:static md:w-56 md:translate-x-0 md:bg-zinc-900/50 ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="h-14 flex items-center gap-2 px-4 border-b border-zinc-800">
-          <Tv className="w-5 h-5 text-indigo-400" />
-          <span className="font-semibold text-sm tracking-tight">XMLTV EPG</span>
-          <button type="button" className="ml-auto rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 md:hidden" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation">
-            <X className="h-5 w-5" />
+    <div className={`app-shell${collapsed ? ' is-collapsed' : ''}`}>
+      <a href="#main-content" className="skip-link">Skip to content</a>
+      {mobileNavOpen && <button type="button" className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
+      <aside className={`app-sidebar${mobileNavOpen ? ' is-open' : ''}`} aria-label="Primary">
+        <div className="sidebar-brand">
+          <NavLink to="/" className="brand-lockup" aria-label="XMLTV EPG dashboard">
+            <span className="brand-mark" aria-hidden="true"><span /><span /><span /></span>
+            <span className="brand-copy">
+              <span className="brand-name">XMLTV EPG</span>
+              <span className="brand-subtitle">Guide aggregation console</span>
+            </span>
+          </NavLink>
+          <button type="button" className="icon-button sidebar-close" onClick={() => { setMobileNavOpen(false); menuButtonRef.current?.focus() }} aria-label="Close navigation" title="Close navigation">
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        <nav className="flex-1 py-4 space-y-1 px-2">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              onClick={() => setMobileNavOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                'flex min-h-11 items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                  isActive
-                    ? 'bg-indigo-500/10 text-indigo-300'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50',
-                )
-              }
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </NavLink>
+        <nav className="sidebar-nav" aria-label="Sections">
+          {navGroups.map((group) => (
+            <div key={group.label} className="nav-group">
+              <p className="nav-section">{group.label}</p>
+              <ul className="nav-list">
+                {group.items.map(({ to, icon: Icon, label }) => (
+                  <li key={to}>
+                    <NavLink
+                      to={to}
+                      end={to === '/'}
+                      title={collapsed ? label : undefined}
+                      className={({ isActive }) => `nav-link${isActive ? ' is-active' : ''}`}
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <Icon className="h-[17px] w-[17px]" strokeWidth={1.7} aria-hidden="true" />
+                          <span className="nav-label">{label}</span>
+                          {isActive && <ChevronRight className="nav-chevron h-[13px] w-[13px]" aria-hidden="true" />}
+                        </>
+                      )}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
         </nav>
-        <div className="p-3 border-t border-zinc-800 text-xs text-zinc-500 flex items-center justify-between">
-          <span>v1.0.0</span>
-          <button
-            type="button"
-            onClick={() => setLightMode((enabled) => !enabled)}
-            aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
-            title={lightMode ? 'Dark mode' : 'Light mode'}
-            className="min-h-11 min-w-11 rounded-lg p-2 hover:bg-zinc-800/70 hover:text-zinc-200 transition-colors"
-          >
-            {lightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          </button>
+        <div className="sidebar-footer">
+          <div className="sidebar-meta">
+            <span>XMLTV EPG</span>
+            <span className="font-mono">v1.0.0</span>
+            <button
+              type="button"
+              className="icon-button collapse-button"
+              onClick={() => setCollapsed((value) => !value)}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-pressed={collapsed}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          </div>
         </div>
       </aside>
-      <main ref={mainRef} id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-auto outline-none">
-        <div className="flex h-14 items-center border-b border-zinc-800 px-4 md:hidden">
-          <button type="button" className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
-            <Menu className="h-5 w-5" />
-          </button>
-          <span className="ml-3 text-sm font-medium text-zinc-200">XMLTV EPG</span>
-        </div>
-        <Outlet />
-      </main>
+      <div className="app-main">
+        <header className="topbar">
+          <div className="topbar-title">
+            <button
+              ref={menuButtonRef}
+              type="button"
+              className="icon-button menu-button"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation"
+              aria-expanded={mobileNavOpen}
+              title="Open navigation"
+            >
+              <Menu className="h-[18px] w-[18px]" aria-hidden="true" />
+            </button>
+            <div className="min-w-0">
+              <p>XMLTV EPG</p>
+              <h1>{title}</h1>
+            </div>
+          </div>
+          <div className="topbar-actions">
+            <span className={`service-pill${serviceUp ? ' is-online' : serviceDown ? ' is-offline' : ''}`} aria-live="polite">
+              {serviceDown ? <WifiOff className="h-3.5 w-3.5" aria-hidden="true" /> : <Wifi className="h-3.5 w-3.5" aria-hidden="true" />}
+              {serviceUp ? 'API online' : serviceDown ? 'API unreachable' : 'Checking API'}
+            </span>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setTheme(nextTheme)}
+              aria-label={`${themeMeta[theme].label} active. Switch to ${upcomingTheme.toLowerCase()}`}
+              title={`${themeMeta[theme].label} — switch to ${upcomingTheme.toLowerCase()}`}
+            >
+              <ThemeIcon className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+        <main ref={mainRef} id="main-content" tabIndex={-1} className="content-area">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }
