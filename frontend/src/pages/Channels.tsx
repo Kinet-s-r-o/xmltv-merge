@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ListVideo, Search } from 'lucide-react'
-import { api } from '../api/client'
+import { CalendarDays, ListVideo, Search } from 'lucide-react'
+import { api, Channel } from '../api/client'
+import { StationScheduleDialog } from '../components/channels/StationScheduleDialog'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
@@ -13,6 +14,7 @@ export function Channels() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<number | undefined>()
+  const [scheduleChannel, setScheduleChannel] = useState<Channel | null>(null)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250)
@@ -104,6 +106,7 @@ export function Channels() {
                     <th scope="col">Channel</th>
                     <th scope="col">XMLTV ID</th>
                     <th scope="col">Source</th>
+                    <th scope="col" className="text-right">Schedule</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -114,11 +117,26 @@ export function Channels() {
                           {channel.icon_url
                             ? <img src={channel.icon_url} alt="" className="channel-logo" loading="lazy" />
                             : <span className="channel-logo" aria-hidden="true">{channel.name.charAt(0).toUpperCase()}</span>}
-                          <span className="table-text font-medium">{channel.name}</span>
+                          <button type="button" className="btn-link table-text font-medium" onClick={() => setScheduleChannel(channel)} title="Show this station's schedule">
+                            {channel.name}
+                          </button>
                         </span>
                       </td>
                       <td><span className="table-text font-mono break-all">{channel.external_id}</span></td>
                       <td><span className="table-text">{sourceNames.get(channel.source_id) ?? `Source #${channel.source_id}`}</span></td>
+                      <td>
+                        <div className="cell-actions">
+                          <button
+                            type="button"
+                            className="icon-button"
+                            onClick={() => setScheduleChannel(channel)}
+                            aria-label={`Show schedule of ${channel.name}`}
+                            title="Show schedule by day"
+                          >
+                            <CalendarDays className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -128,6 +146,12 @@ export function Channels() {
           </>
         )}
       </section>
+
+      <StationScheduleDialog
+        channel={scheduleChannel}
+        sourceName={scheduleChannel ? sourceNames.get(scheduleChannel.source_id) : undefined}
+        onClose={() => setScheduleChannel(null)}
+      />
     </>
   )
 }

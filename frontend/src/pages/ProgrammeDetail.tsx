@@ -25,7 +25,7 @@ export function ProgrammeDetail() {
 
   const backButton = (
     <button type="button" onClick={() => navigate(backTo)} className="btn btn-secondary">
-      <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to EPG grid
+      <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> {backTo.startsWith('/channels') ? 'Back to channels' : 'Back to EPG grid'}
     </button>
   )
 

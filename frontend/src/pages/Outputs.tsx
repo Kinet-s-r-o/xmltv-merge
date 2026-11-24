@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clipboard, Download, FileDown, FileUp, Layers3, ListVideo, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { Clipboard, Download, Layers3, ListVideo, Plus, Save, Search, Trash2, Upload, X } from 'lucide-react'
 import { api, Channel, OutputChannel } from '../api/client'
 import { OutputImportDialog } from '../components/outputs/OutputImportDialog'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -152,22 +152,23 @@ export function Outputs() {
         <input {...transfer.inputProps} />
         <button
           type="button"
-          className="btn btn-secondary"
+          className="btn btn-secondary btn-icon"
           onClick={transfer.openPicker}
           disabled={transfer.state.status !== 'closed' || isDirty}
-          title={isDirty ? 'Save or discard the changes to the open output before importing' : 'Add or update outputs from an XML configuration file'}
+          aria-label="Import outputs from XML"
+          title={isDirty ? 'Save or discard the changes to the open output before importing' : 'Import outputs from XML — add or update outputs from a configuration file'}
         >
-          <FileUp className="h-3.5 w-3.5" aria-hidden="true" /> Import
+          <Upload className="h-4 w-4" aria-hidden="true" />
         </button>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="btn btn-secondary btn-icon"
           onClick={transfer.exportNow}
           disabled={transfer.exporting || outputs.length === 0}
-          title="Download every output's channels and field rules as XML (without feed tokens)"
+          aria-label={transfer.exporting ? 'Exporting outputs…' : 'Export outputs to XML'}
+          title="Export outputs to XML — every output's channels and field rules, without feed tokens"
         >
-          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <FileDown className="h-3.5 w-3.5" aria-hidden="true" />}
-          {transfer.exporting ? 'Exporting…' : 'Export'}
+          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
         </button>
         <button type="button" className="btn btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
           {createMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />} Add output

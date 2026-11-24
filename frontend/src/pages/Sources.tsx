@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Database, FileDown, FileUp, Link2, Pencil, Plus, RefreshCw, Save, Search, Square, Trash2, X } from 'lucide-react'
+import { Database, Download, Link2, Pencil, Plus, RefreshCw, Save, Search, Square, Trash2, Upload, X } from 'lucide-react'
 import { api, CreateSourceInput, Source } from '../api/client'
 import { SourceImportDialog } from '../components/sources/SourceImportDialog'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -297,22 +297,23 @@ export function Sources() {
         <input {...transfer.inputProps} />
         <button
           type="button"
-          className="btn btn-secondary"
+          className="btn btn-secondary btn-icon"
           onClick={transfer.openPicker}
           disabled={transfer.state.status !== 'closed'}
-          title="Add or update sources from an XML configuration file"
+          aria-label="Import sources from XML"
+          title="Import sources from XML — add or update sources from a configuration file"
         >
-          <FileUp className="h-3.5 w-3.5" aria-hidden="true" /> Import
+          <Upload className="h-4 w-4" aria-hidden="true" />
         </button>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="btn btn-secondary btn-icon"
           onClick={transfer.exportNow}
           disabled={transfer.exporting || sources.length === 0}
-          title="Download the source configuration as XML"
+          aria-label={transfer.exporting ? 'Exporting sources…' : 'Export sources to XML'}
+          title="Export sources to XML — download the source configuration"
         >
-          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <FileDown className="h-3.5 w-3.5" aria-hidden="true" />}
-          {transfer.exporting ? 'Exporting…' : 'Export'}
+          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
         </button>
         <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source

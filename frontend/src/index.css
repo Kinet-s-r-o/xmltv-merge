@@ -244,6 +244,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .icon-button:disabled { opacity: .48; cursor: not-allowed; }
   .icon-button.is-danger { color: rgb(var(--error-text)); }
   .icon-button.is-danger:hover:not(:disabled) { color: rgb(var(--error-text)); background: rgb(var(--error) / .08); border-color: rgb(var(--error) / .24); }
+  .btn.btn-icon { width: 34px; padding: 0; }
   .btn { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 12px; border: 1px solid transparent; border-radius: var(--radius-control); font-size: 12px; font-weight: 600; line-height: 1.2; text-decoration: none; white-space: nowrap; transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease; }
   .btn:disabled { opacity: .48; cursor: not-allowed; }
   .btn-primary { color: rgb(var(--text-on-action)); background: rgb(var(--action-primary)); border-color: rgb(var(--action-primary)); }
@@ -348,6 +349,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .dialog-small { max-width: 420px; }
   .dialog-medium { max-width: 560px; }
   .dialog-large { max-width: 880px; }
+  .dialog-wide { max-width: 1120px; }
   .dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 16px 18px; border-bottom: 1px solid rgb(var(--border-subtle)); }
   .dialog-header h2 { margin: 0; font-size: 16px; font-weight: 620; }
   .dialog-header p { margin: 4px 0 0; color: rgb(var(--text-muted)); font-size: 12px; line-height: 1.5; }
@@ -436,6 +438,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .epg-legend-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; border: 1px solid rgb(var(--accent) / .45); background: rgb(var(--accent) / .14); border-radius: 2px; }
   .epg-legend-swatch.is-live { border-color: rgb(var(--success) / .55); background: rgb(var(--success) / .16); }
   .epg-legend-swatch.is-now { width: 2px; border: 0; background: rgb(var(--warning)); }
+  /* Station schedule dialog (Channels): days as rows, 120px per hour */
+  .station-schedule { display: flex; flex-direction: column; gap: 10px; }
+  .station-schedule-scroll { max-height: calc(min(760px, 100vh - 32px) - 210px); border: 1px solid rgb(var(--border-subtle)); }
+  .station-schedule-grid { --epg-station-width: 150px; }
+  .station-schedule-grid .epg-station strong { display: flex; align-items: center; gap: 6px; }
+  .station-schedule-today { min-height: 16px; padding: 0 5px; font-size: 9px; }
+  .station-schedule-grid .epg-row.is-today .epg-station { background: linear-gradient(rgb(var(--warning) / .08), rgb(var(--warning) / .08)), rgb(var(--bg-surface)); box-shadow: inset 3px 0 0 rgb(var(--warning)); }
+  .station-schedule-gap { position: sticky; left: calc(var(--epg-station-width) + 12px); display: inline-flex; align-items: center; height: 100%; color: rgb(var(--text-muted)); font-size: 11px; font-style: italic; }
 
   /* ============================================================
    * 18. Outputs editor (app-specific, see pages/outputs.md)
@@ -472,6 +482,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .page-header-tools { width: 100%; justify-content: flex-start; }
   .input { min-height: 44px; }
   .btn { min-height: 44px; }
+  .btn.btn-icon { width: 44px; }
   .icon-button, .data-table .icon-button { width: 44px; height: 44px; }
   .switch-control { min-height: 44px; }
   .check-label { min-height: 44px; }

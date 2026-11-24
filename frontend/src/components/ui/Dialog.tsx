@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
-export type DialogSize = 'small' | 'medium' | 'large'
+export type DialogSize = 'small' | 'medium' | 'large' | 'wide'
 
 interface DialogProps {
   open: boolean

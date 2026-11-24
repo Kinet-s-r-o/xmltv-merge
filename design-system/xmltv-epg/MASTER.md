@@ -129,7 +129,9 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
 - **Buttons:** `.btn` + `.btn-primary` (one per region, the main action),
   `.btn-secondary`, `.btn-danger` (destructive, always confirmed),
   `.btn-xs` for table/panel row actions. Icon-only controls use
-  `.icon-button` (`.is-danger` for delete) with `aria-label` and `title`.
+  `.icon-button` (`.is-danger` for delete) with `aria-label` and `title`;
+  icon-only actions in a page header use `.btn.btn-secondary.btn-icon`
+  (34px square, 44px on touch) so they line up with the text buttons.
   Busy buttons show `.spinner.spinner-sm` and "Working…"/"Saving…".
 - **Forms:** labels wrap their control (`<label class="field">Label<input
   class="input"></label>`); hints use `.field-hint`, errors `.field-error`
@@ -167,7 +169,8 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   offer Stop (finishes the current record), lock row actions and selection,
   warn on page unload, and end with one summary notification listing
   failures and skipped records.
-- **Dialogs:** `Dialog` sizes small 420 / medium 560 / large 880; Cancel is
+- **Dialogs:** `Dialog` sizes small 420 / medium 560 / large 880 / wide 1120
+  (the Kinet side-panel width, for timelines such as the station schedule); Cancel is
   `.btn-secondary`, confirm `.btn-primary` or `.btn-danger`. Not draggable or
   resizable (Kinet's drag/resize affordance is not adopted in this app).
   Dialogs may stack (e.g. a confirm over a form); only the top one handles
@@ -180,14 +183,17 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   changes?" `ConfirmDialog` (Keep editing / Discard changes). Reloading or
   leaving the page triggers the browser's `beforeunload` warning. Closing is
   blocked while saving.
-- **File imports:** a header `.btn-secondary` "Import" opens the native file
+- **File imports:** a header icon-only Import button opens the native file
   picker; the file is validated server-side and shown in a large `Dialog`
   preview before anything is written: summary badges (new = success,
   updated = warning, unchanged = neutral, always with text), a paged table
   with the per-row result and changed fields, and validation problems as an
   `.inline-alert.is-error` list. The confirm button names the count
-  ("Import 3 sources"). "Export" is a `.btn-secondary` next to it. Icons:
-  `FileUp` for Import, `FileDown` for Export. Use the shared
+  ("Import 3 sources"). Export is the icon-only button next to it. Both are
+  `.btn.btn-secondary.btn-icon` with Lucide `Upload` (Import) and `Download`
+  (Export), an `aria-label` ("Import sources from XML", "Export sources to
+  XML") and a `title` that explains the action; a running export swaps the
+  icon for `.spinner-sm`. Use the shared
   `ImportPreviewDialog` + `useConfigTransfer`. Partial problems that do not
   block the import (e.g. output channels not found) show as an error badge
   with a count plus an `.inline-alert.is-warning` explaining the next step.

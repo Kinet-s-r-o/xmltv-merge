@@ -15,7 +15,8 @@
 | `src/lib/tableSelection.ts` | `useTableSelection`: row checkboxes, page select-all, Shift range, Ctrl/Cmd+A and Delete shortcuts for data tables. | Selection rules in the design master (Tables → Row selection). |
 | `src/pages/Dashboard.tsx` | Source-backed counts and quick links. | Source statistics contract. |
 | `src/pages/EPGView.tsx` | Date/channel filtered programme grid, paging and selection. | Programme query parameters and detail navigation. |
-| `src/pages/Channels.tsx` | Channel listing with search and source filter. | Channel API and source list. |
+| `src/pages/Channels.tsx` | Channel listing with search and source filter; opens a station's schedule dialog. | Channel API and source list. |
+| `src/components/channels/StationScheduleDialog.tsx` | One station's schedule: days as rows, 24 h horizontally, opens at the current time. | `../design-system/xmltv-epg/pages/channels.md`; programmes query (`channel_id`, `limit`). |
 | `src/pages/ProgrammeDetail.tsx` | Full programme metadata, credits and categories. | Programme detail response shape. |
 | `src/pages/Sources.tsx` | URL source CRUD (add/edit in a modal with unsaved-changes guard), refresh, activation, search, paging, import status UI, XML configuration Import/Export and bulk delete / download & import of selected sources. | Source lifecycle API and disabled-source behavior. |
 | `src/pages/Outputs.tsx` | Configurable output editor, channel search/source labels, field toggles, public URL and XML configuration Import/Export (Import is disabled while the open output has unsaved changes). | Output/channel serialization contract. |
