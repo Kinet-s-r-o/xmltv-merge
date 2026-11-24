@@ -56,10 +56,11 @@ export function EPGView() {
     setSearchParams(params, { replace: true })
   }, [page, search, selectedDate, selectedSource, setSearchParams])
 
-  const { data: sources = [] } = useQuery({
+  const { data: sourceData } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
   })
+  const sources = useMemo(() => sourceData ?? [], [sourceData])
 
   const { data: channelData, isLoading: channelsLoading, isError: channelsError, error: channelsErrorValue, refetch: refetchChannels } = useQuery({
     queryKey: ['channels', selectedSource, search],

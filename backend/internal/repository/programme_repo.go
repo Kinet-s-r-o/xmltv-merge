@@ -172,7 +172,7 @@ func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channel
 	}
 	defer rows.Close()
 
-	var programmes []models.Programme
+	programmes := make([]models.Programme, 0)
 	for rows.Next() {
 		var p models.Programme
 		var titleLang, titleText, creditsJSON, categoriesJSON string
@@ -188,6 +188,9 @@ func (r *ProgrammeRepository) List(ctx context.Context, date *time.Time, channel
 		_ = json.Unmarshal([]byte(creditsJSON), &p.Credits)
 		_ = json.Unmarshal([]byte(categoriesJSON), &p.Categories)
 		programmes = append(programmes, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
 	}
 	return programmes, total, nil
 }

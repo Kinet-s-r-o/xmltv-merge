@@ -129,7 +129,7 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 	}
 	defer rows.Close()
 
-	var sources []models.Source
+	sources := make([]models.Source, 0)
 	for rows.Next() {
 		var s models.Source
 		if err := rows.Scan(&s.ID, &s.Name, &s.SourceURL, &s.Enabled, &s.RefreshIntervalMinutes, &s.HistoryDays,
@@ -140,7 +140,7 @@ func (r *SourceRepository) List(ctx context.Context) ([]models.Source, error) {
 		}
 		sources = append(sources, s)
 	}
-	return sources, nil
+	return sources, rows.Err()
 }
 
 func (r *SourceRepository) GetByID(ctx context.Context, id int) (*models.Source, error) {
