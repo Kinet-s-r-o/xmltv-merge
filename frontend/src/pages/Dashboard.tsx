@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Database, Tv, Upload } from 'lucide-react'
+import { ArrowRight, Database, Upload } from 'lucide-react'
 import { api } from '../api/client'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
@@ -33,10 +33,7 @@ export function Dashboard() {
       <PageHeader
         title="Feed health"
         description="Import state, freshness and guide coverage of every XMLTV source. Sources that failed or never imported need action on the Sources page."
-      >
-        <Link to="/epg" className="btn btn-secondary"><Tv className="h-3.5 w-3.5" aria-hidden="true" /> Open EPG grid</Link>
-        <Link to="/sources" className="btn btn-primary"><Database className="h-3.5 w-3.5" aria-hidden="true" /> Manage sources</Link>
-      </PageHeader>
+      />
 
       {!isLoading && !isError && (
         <dl className="ops-register" aria-label="Source and guide totals">
