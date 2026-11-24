@@ -13,7 +13,7 @@
 | `src/pages/EPGView.tsx` | Date/channel filtered programme grid, paging and selection. | Programme query parameters and detail navigation. |
 | `src/pages/Channels.tsx` | Channel listing with search and source filter. | Channel API and source list. |
 | `src/pages/ProgrammeDetail.tsx` | Full programme metadata, credits and categories. | Programme detail response shape. |
-| `src/pages/Sources.tsx` | URL source CRUD, refresh, activation, search and import status UI. | Source lifecycle API and disabled-source behavior. |
+| `src/pages/Sources.tsx` | URL source CRUD (add/edit in a modal with unsaved-changes guard), refresh, activation, search, paging and import status UI. | Source lifecycle API and disabled-source behavior. |
 | `src/pages/Outputs.tsx` | Configurable output editor, channel search/source labels, field toggles and public URL. | Output/channel serialization contract. |
 | `src/index.css` | Kinet tokens (dark/light), `@theme inline` semantic utilities, base reset and all component classes, including EPG timeline and output editor. | Global visual behavior; no raw hex or palette-shade utilities. |
 | `../design-system/xmltv-epg/MASTER.md` | Project-wide visual source of truth. | Read before UI changes; page overrides are under its `pages/` directory. |

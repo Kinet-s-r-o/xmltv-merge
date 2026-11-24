@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { ListVideo, Search } from 'lucide-react'
 import { api } from '../api/client'
 import { PageHeader } from '../components/ui/PageHeader'
-import { Pagination, readStoredPageSize, storePageSize } from '../components/ui/Pagination'
+import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 
 const PAGE_SIZE_KEY = 'xmltv-channels-page-size'
@@ -13,15 +13,11 @@ export function Channels() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<number | undefined>()
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(() => readStoredPageSize(PAGE_SIZE_KEY, 50))
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 250)
     return () => window.clearTimeout(timer)
   }, [searchInput])
-
-  useEffect(() => setPage(1), [search, sourceFilter, pageSize])
 
   const { data: sourceData } = useQuery({
     queryKey: ['sources'],
@@ -35,9 +31,7 @@ export function Channels() {
     queryFn: () => api.channels({ source_id: sourceFilter, search: search || undefined }),
   })
   const channels = channelData ?? []
-  const pageCount = Math.max(1, Math.ceil(channels.length / pageSize))
-  const currentPage = Math.min(page, pageCount)
-  const visible = channels.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const { visible, paginationProps } = usePagedRows(channels, PAGE_SIZE_KEY, `${search}|${sourceFilter ?? ''}`)
   const filtered = Boolean(search) || sourceFilter !== undefined
 
   return (
@@ -130,14 +124,7 @@ export function Channels() {
                 </tbody>
               </table>
             </div>
-            <Pagination
-              page={currentPage}
-              pageSize={pageSize}
-              total={channels.length}
-              itemLabel="channels"
-              onPageChange={setPage}
-              onPageSizeChange={(size) => { setPageSize(size); storePageSize(PAGE_SIZE_KEY, size) }}
-            />
+            <Pagination {...paginationProps} itemLabel="channels" />
           </>
         )}
       </section>

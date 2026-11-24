@@ -8,6 +8,13 @@ Classes live in `frontend/src/index.css` §17 (`.epg-*`).
   140px below 640px via `--epg-station-width`); the hour header row is sticky
   (z-20) inside `.epg-scroll`, which scrolls in both axes so the page never
   scrolls horizontally.
+- **Opens at the current time.** When the selected day is today, the grid
+  scrolls horizontally on every mount (first load, day, page or filter
+  change) so the current-time line sits one hour (160px) right of the station
+  column. Other days open at 00:00. The header button reads "Today" on other
+  days and "Now" on today, where it re-scrolls to the current time.
+- **Stations per page** uses the shared page sizes (10, 15, 20, 25, 50, 100;
+  default 50), remembered in `localStorage`.
 - **Inline geometry is allowed** for programme `left`/`width`, hour lines and
   the current-time line only, and each such element carries
   `data-dynamic-style`.

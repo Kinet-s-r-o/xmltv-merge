@@ -18,6 +18,9 @@ interface DialogProps {
   initialFocusRef?: React.RefObject<HTMLElement | null>
 }
 
+/** Open dialogs, innermost last; only the top one handles keys and the app root stays inert until all close. */
+const dialogStack: symbol[] = []
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /**
@@ -40,6 +43,8 @@ export function Dialog({ open, title, description, size = 'medium', role = 'dial
     const previouslyFocused = document.activeElement as HTMLElement | null
     const root = document.getElementById('root')
     const previousOverflow = document.body.style.overflow
+    const token = Symbol('dialog')
+    dialogStack.push(token)
     document.body.style.overflow = 'hidden'
     root?.setAttribute('inert', '')
 
@@ -47,6 +52,7 @@ export function Dialog({ open, title, description, size = 'medium', role = 'dial
     focusTarget?.focus()
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (dialogStack[dialogStack.length - 1] !== token) return
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
@@ -72,8 +78,9 @@ export function Dialog({ open, title, description, size = 'medium', role = 'dial
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
+      dialogStack.splice(dialogStack.indexOf(token), 1)
       document.body.style.overflow = previousOverflow
-      root?.removeAttribute('inert')
+      if (dialogStack.length === 0) root?.removeAttribute('inert')
       previouslyFocused?.focus()
     }
   }, [open, initialFocusRef])
@@ -91,8 +98,7 @@ export function Dialog({ open, title, description, size = 'medium', role = 'dial
       <section
         ref={panelRef}
         className={`dialog-panel dialog-${size}`}
-        role="dialog"
-        {...(role === 'alertdialog' ? { role: 'alertdialog' } : {})}
+        role={role}
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}

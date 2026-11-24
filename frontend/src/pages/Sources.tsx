@@ -1,14 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Database, Link2, Pencil, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
+import { Database, Link2, Pencil, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react'
 import { api, CreateSourceInput, Source } from '../api/client'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { Dialog } from '../components/ui/Dialog'
 import { useFeedback } from '../components/ui/Feedback'
 import { PageHeader } from '../components/ui/PageHeader'
+import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 import { formatInterval, formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
 
 type SourceStatusFilter = 'all' | 'healthy' | 'attention' | 'disabled'
+
+interface SourceFormValues {
+  name: string
+  url: string
+  intervalHours: number
+  historyDays: number
+}
+
+const EMPTY_FORM: SourceFormValues = { name: '', url: '', intervalHours: 6, historyDays: 7 }
+
+function sameForm(a: SourceFormValues, b: SourceFormValues) {
+  return a.name === b.name && a.url === b.url && a.intervalHours === b.intervalHours && a.historyDays === b.historyDays
+}
 
 function matchesStatus(source: Source, filter: SourceStatusFilter) {
   const health = sourceHealth(source)
@@ -20,12 +35,13 @@ function matchesStatus(source: Source, filter: SourceStatusFilter) {
 export function Sources() {
   const queryClient = useQueryClient()
   const { notify } = useFeedback()
-  const [name, setName] = useState('')
-  const [url, setUrl] = useState('')
-  const [intervalHours, setIntervalHours] = useState(6)
-  const [historyDays, setHistoryDays] = useState(7)
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState<SourceFormValues>(EMPTY_FORM)
+  const [initialForm, setInitialForm] = useState<SourceFormValues>(EMPTY_FORM)
   const [formError, setFormError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [sourceSearch, setSourceSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<SourceStatusFilter>('all')
   const [deleteTarget, setDeleteTarget] = useState<Source | null>(null)
@@ -37,6 +53,9 @@ export function Sources() {
   })
   const sources = data ?? []
   const editingSource = sources.find((source) => source.id === editingId)
+  const { name, url, intervalHours, historyDays } = form
+  const formDirty = formOpen && !sameForm(form, initialForm)
+  const setField = <K extends keyof SourceFormValues>(key: K, value: SourceFormValues[K]) => setForm((current) => ({ ...current, [key]: value }))
 
   const invalidateGuideData = () => {
     queryClient.invalidateQueries({ queryKey: ['sources'] })
@@ -45,12 +64,21 @@ export function Sources() {
   }
 
   const resetForm = () => {
+    setFormOpen(false)
+    setDiscardOpen(false)
     setEditingId(null)
-    setName('')
-    setUrl('')
-    setIntervalHours(6)
-    setHistoryDays(7)
+    setForm(EMPTY_FORM)
+    setInitialForm(EMPTY_FORM)
     setFormError(null)
+  }
+
+  const openForm = (values: SourceFormValues, id: number | null) => {
+    setEditingId(id)
+    setForm(values)
+    setInitialForm(values)
+    setFormError(null)
+    setDiscardOpen(false)
+    setFormOpen(true)
   }
 
   const addMutation = useMutation({
@@ -116,37 +144,77 @@ export function Sources() {
     return matchesSearch && matchesStatus(source, statusFilter)
   })
 
-  const handleEdit = (source: Source) => {
-    setEditingId(source.id)
-    setName(source.name)
-    setUrl(source.source_url)
-    setIntervalHours(source.refresh_interval_minutes / 60)
-    setHistoryDays(source.history_days)
-    setFormError(null)
-    document.getElementById('source-form')?.scrollIntoView({ block: 'nearest' })
-    document.getElementById('source-name')?.focus()
-  }
+  const { visible: visibleSources, paginationProps } = usePagedRows(filteredSources, 'xmltv-sources-page-size', `${query}|${statusFilter}`)
+
+  const handleEdit = (source: Source) => openForm({
+    name: source.name,
+    url: source.source_url,
+    intervalHours: source.refresh_interval_minutes / 60,
+    historyDays: source.history_days,
+  }, source.id)
 
   const intervalInvalid = !Number.isFinite(intervalHours) || intervalHours < 1 || intervalHours > 168
   const historyInvalid = !Number.isFinite(historyDays) || historyDays < 1 || historyDays > 3650
   const saving = addMutation.isPending || updateMutation.isPending
+
+  /** Every way of closing the form (Escape, backdrop, ×, Cancel) asks first when there are unsaved edits. */
+  const requestCloseForm = () => {
+    if (saving) return
+    if (formDirty) setDiscardOpen(true)
+    else resetForm()
+  }
+
+  useEffect(() => {
+    if (!formDirty) return
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [formDirty])
 
   return (
     <>
       <PageHeader
         title="Sources"
         description="XMLTV URLs imported on a schedule. Disabled sources keep their stored guide data but are not refreshed."
-      />
+      >
+        <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source
+        </button>
+      </PageHeader>
 
-      <section id="source-form" className="data-panel" aria-labelledby="source-form-title">
-        <div className="data-panel-header">
-          <div>
-            <h2 id="source-form-title">{editingId !== null ? <><Pencil className="h-4 w-4" aria-hidden="true" /> Edit source</> : <><Link2 className="h-4 w-4" aria-hidden="true" /> Add XMLTV source</>}</h2>
-            <p>{editingId !== null ? `Changes apply to ${editingSource?.name ?? 'this source'} from its next refresh.` : 'The first download starts right after saving.'}</p>
-          </div>
-        </div>
+      <Dialog
+        open={formOpen}
+        size="medium"
+        busy={saving}
+        title={
+          <span className="inline-flex items-center gap-2">
+            {editingId !== null ? <><Pencil className="h-4 w-4" aria-hidden="true" /> Edit source</> : <><Link2 className="h-4 w-4" aria-hidden="true" /> Add XMLTV source</>}
+          </span>
+        }
+        description={editingId !== null ? `Changes apply to ${editingSource?.name ?? 'this source'} from its next refresh.` : 'The first download starts right after saving.'}
+        onClose={requestCloseForm}
+        initialFocusRef={nameInputRef}
+        actions={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={requestCloseForm} disabled={saving}>Cancel</button>
+            <button
+              type="submit"
+              form="source-form"
+              className="btn btn-primary"
+              disabled={!name.trim() || !url.trim() || intervalInvalid || historyInvalid || saving || (editingId !== null && !formDirty)}
+            >
+              {saving ? <span className="spinner spinner-sm" aria-hidden="true" /> : editingId !== null ? <Save className="h-3.5 w-3.5" aria-hidden="true" /> : <Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              {saving ? 'Saving…' : editingId !== null ? 'Save changes' : 'Add source'}
+            </button>
+          </>
+        }
+      >
         <form
-          className="data-panel-body flex flex-col gap-3"
+          id="source-form"
+          className="flex flex-col gap-3"
           onSubmit={(event) => {
             event.preventDefault()
             setFormError(null)
@@ -155,31 +223,32 @@ export function Sources() {
             else addMutation.mutate()
           }}
         >
-          {editingId !== null && (
+          {formDirty && (
             <div className="form-dirty-banner" role="status">
-              <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Editing {editingSource?.name ?? 'source'} — save the changes or cancel to discard them.
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Unsaved changes — save them or cancel to discard.
             </div>
           )}
-          <div className="grid items-start gap-3 lg:grid-cols-[minmax(160px,2fr)_minmax(260px,5fr)_auto_auto]">
-            <label className="field">
+          <div className="grid items-start gap-3 sm:grid-cols-2">
+            <label className="field sm:col-span-2">
               Source name
               <input
                 id="source-name"
+                ref={nameInputRef}
                 required
                 className="input"
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => setField('name', event.target.value)}
                 placeholder="e.g. Provider EPG – SK"
               />
             </label>
-            <label className="field">
+            <label className="field sm:col-span-2">
               XMLTV URL
               <input
                 required
                 type="url"
                 className="input font-mono"
                 value={url}
-                onChange={(event) => setUrl(event.target.value)}
+                onChange={(event) => setField('url', event.target.value)}
                 placeholder="https://provider.example/epg.xml.gz"
               />
             </label>
@@ -194,7 +263,7 @@ export function Sources() {
                   value={intervalHours}
                   aria-invalid={intervalInvalid || undefined}
                   aria-describedby="interval-hint"
-                  onChange={(event) => setIntervalHours(Number(event.target.value))}
+                  onChange={(event) => setField('intervalHours', Number(event.target.value))}
                 />
                 hours
               </span>
@@ -211,7 +280,7 @@ export function Sources() {
                   value={historyDays}
                   aria-invalid={historyInvalid || undefined}
                   aria-describedby="history-hint"
-                  onChange={(event) => setHistoryDays(Number(event.target.value))}
+                  onChange={(event) => setField('historyDays', Number(event.target.value))}
                 />
                 days
               </span>
@@ -223,23 +292,21 @@ export function Sources() {
               {editingId !== null ? 'Changes were not saved: ' : 'Source was not added: '}{formError}
             </p>
           )}
-          <div className="flex flex-wrap justify-end gap-2">
-            {editingId !== null && (
-              <button type="button" className="btn btn-secondary" onClick={resetForm} disabled={saving}>
-                <X className="h-3.5 w-3.5" aria-hidden="true" /> Cancel
-              </button>
-            )}
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={!name.trim() || !url.trim() || intervalInvalid || historyInvalid || saving}
-            >
-              {saving ? <span className="spinner spinner-sm" aria-hidden="true" /> : editingId !== null ? <Save className="h-3.5 w-3.5" aria-hidden="true" /> : <Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
-              {saving ? 'Working…' : editingId !== null ? 'Save changes' : 'Add source'}
-            </button>
-          </div>
         </form>
-      </section>
+      </Dialog>
+
+      <ConfirmDialog
+        open={discardOpen}
+        title="Discard unsaved changes?"
+        description={editingId !== null
+          ? `Your edits to ${editingSource?.name ?? 'this source'} have not been saved and will be lost.`
+          : 'The new source has not been saved; what you entered will be lost.'}
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        destructive
+        onCancel={() => setDiscardOpen(false)}
+        onConfirm={resetForm}
+      />
 
       <section className="data-panel" aria-labelledby="sources-table-title">
         <div className="table-panel-toolbar">
@@ -279,8 +346,12 @@ export function Sources() {
           <EmptyState
             icon={Database}
             title="No XMLTV sources configured"
-            message="Add a source above with its XMLTV URL. Channels and programmes become available in the EPG grid after the first import."
-          />
+            message="Add a source with its XMLTV URL. Channels and programmes become available in the EPG grid after the first import."
+          >
+            <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source
+            </button>
+          </EmptyState>
         ) : filteredSources.length === 0 ? (
           <EmptyState icon={Search} title="No sources match the current filters" message="Clear the search or choose All statuses.">
             <button type="button" className="btn btn-secondary" onClick={() => { setSourceSearch(''); setStatusFilter('all') }}>Clear filters</button>
@@ -301,7 +372,7 @@ export function Sources() {
                 </tr>
               </thead>
               <tbody>
-                {filteredSources.map((source) => {
+                {visibleSources.map((source) => {
                   const health = sourceHealth(source)
                   const toggling = activationMutation.isPending && activationMutation.variables?.source.id === source.id
                   const refreshing = refreshMutation.isPending && refreshMutation.variables?.id === source.id
@@ -375,6 +446,7 @@ export function Sources() {
             </table>
           </div>
         )}
+        {!isLoading && !isError && filteredSources.length > 0 && <Pagination {...paginationProps} itemLabel="sources" />}
       </section>
 
       <ConfirmDialog

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Database, Tv, Upload } from 'lucide-react'
 import { api } from '../api/client'
 import { PageHeader } from '../components/ui/PageHeader'
+import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 import { formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
 
@@ -12,6 +13,7 @@ export function Dashboard() {
     queryFn: () => api.sources(),
   })
   const sources = data ?? []
+  const { visible: visibleSources, paginationProps } = usePagedRows(sources, 'xmltv-dashboard-sources-page-size')
 
   const totalChannels = sources.reduce((sum, s) => sum + (s.channel_count ?? 0), 0)
   const totalProgrammes = sources.reduce((sum, s) => sum + (s.programme_count ?? 0), 0)
@@ -104,7 +106,7 @@ export function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {sources.map((source) => {
+                {visibleSources.map((source) => {
                   const health = sourceHealth(source)
                   return (
                     <tr key={source.id}>
@@ -123,6 +125,7 @@ export function Dashboard() {
             </table>
           </div>
         )}
+        {!isLoading && !isError && sources.length > 0 && <Pagination {...paginationProps} itemLabel="sources" />}
       </section>
     </>
   )

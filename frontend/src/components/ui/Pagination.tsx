@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-export const PAGE_SIZES = [10, 15, 20, 50, 100, 200, 500, 1000]
+export const PAGE_SIZES = [10, 15, 20, 25, 50, 100]
+export const DEFAULT_PAGE_SIZE = 20
 
 interface PaginationProps {
   page: number
@@ -42,7 +44,39 @@ export function Pagination({ page, pageSize, total, itemLabel, onPageChange, onP
   )
 }
 
-export function readStoredPageSize(key: string, fallback = 20) {
+/**
+ * Client-side paging for a table: remembered page size per table, page reset
+ * when the row set's identity (`resetKey`) or the page size changes, and the
+ * current page clamped to the available pages.
+ */
+export function usePagedRows<T>(rows: readonly T[], storageKey: string, resetKey: unknown = null, fallback = DEFAULT_PAGE_SIZE) {
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSizeState] = useState(() => readStoredPageSize(storageKey, fallback))
+
+  useEffect(() => setPage(1), [resetKey, pageSize])
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const visible = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  const setPageSize = (size: number) => {
+    setPageSizeState(size)
+    storePageSize(storageKey, size)
+  }
+
+  return {
+    visible,
+    paginationProps: {
+      page: currentPage,
+      pageSize,
+      total: rows.length,
+      onPageChange: setPage,
+      onPageSizeChange: setPageSize,
+    },
+  }
+}
+
+export function readStoredPageSize(key: string, fallback = DEFAULT_PAGE_SIZE) {
   try {
     const value = Number(localStorage.getItem(key))
     return PAGE_SIZES.includes(value) ? value : fallback

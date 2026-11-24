@@ -145,11 +145,24 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   (error), Awaiting import (warning), Disabled (neutral).
 - **Tables:** `<table class="data-table">`, sticky 40px header, values wrapped
   in `.table-text` (+ `font-mono` for IDs, timestamps, numbers), secondary
-  lines in `.cell-sub`, actions in `.cell-actions`. Pagination via
-  `Pagination` (page sizes 10–1000, persisted per table).
+  lines in `.cell-sub`, actions in `.cell-actions`. Every data table pages
+  client-side with `usePagedRows` + `Pagination`: page sizes 10, 15, 20, 25,
+  50, 100 (default 20), remembered per table in `localStorage`, page reset to
+  1 when filters or page size change. The EPG grid uses the same sizes for
+  "Stations per page".
 - **Dialogs:** `Dialog` sizes small 420 / medium 560 / large 880; Cancel is
   `.btn-secondary`, confirm `.btn-primary` or `.btn-danger`. Not draggable or
   resizable (Kinet's drag/resize affordance is not adopted in this app).
+  Dialogs may stack (e.g. a confirm over a form); only the top one handles
+  Escape and the focus trap.
+- **Create/edit forms:** records are added and edited in a `Dialog` opened
+  from the page header ("Add …") or a row's edit action, not in inline page
+  forms. Once a field differs from its opening values the form is dirty: a
+  `.form-dirty-banner` appears, Save is enabled (edit mode), and every close
+  path — ×, Cancel, Escape, backdrop click — opens a "Discard unsaved
+  changes?" `ConfirmDialog` (Keep editing / Discard changes). Reloading or
+  leaving the page triggers the browser's `beforeunload` warning. Closing is
+  blocked while saving.
 - **Notifications:** `.notice-stack` top-right; success/info auto-dismiss after
   5s, errors persist. Used for mutation outcomes (source added/updated/
   deleted/refreshed/enabled, output created/saved/deleted, clipboard failure).

@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, addDays, isValid, parseISO } from 'date-fns'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, Search, Tv } from 'lucide-react'
 import { api, Programme } from '../api/client'
 import { Dialog } from '../components/ui/Dialog'
+import { PAGE_SIZES, readStoredPageSize, storePageSize } from '../components/ui/Pagination'
 import { PageHeader } from '../components/ui/PageHeader'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 
 const HOUR_WIDTH = 160
 const HOURS_PER_DAY = 24
-const CHANNELS_PER_PAGE = 40
+const PAGE_SIZE_KEY = 'xmltv-epg-page-size'
 
 export function EPGView() {
   const location = useLocation()
@@ -24,6 +25,7 @@ export function EPGView() {
   const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '')
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1))
+  const [pageSize, setPageSize] = useState(() => readStoredPageSize(PAGE_SIZE_KEY, 50))
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<number | null>(null)
   const [now, setNow] = useState(() => new Date())
 
@@ -71,9 +73,9 @@ export function EPGView() {
   })
   const allChannels = channelData ?? []
 
-  const pageCount = Math.max(1, Math.ceil(allChannels.length / CHANNELS_PER_PAGE))
+  const pageCount = Math.max(1, Math.ceil(allChannels.length / pageSize))
   const currentPage = Math.min(page, pageCount)
-  const channels = useMemo(() => allChannels.slice((currentPage - 1) * CHANNELS_PER_PAGE, currentPage * CHANNELS_PER_PAGE), [allChannels, currentPage])
+  const channels = useMemo(() => allChannels.slice((currentPage - 1) * pageSize, currentPage * pageSize), [allChannels, currentPage, pageSize])
   const channelIds = channels.map((channel) => channel.id)
 
   const { data: programmes, isLoading: programmesLoading, isError: programmesError, error: programmesErrorValue, refetch: refetchProgrammes } = useQuery({
@@ -127,10 +129,29 @@ export function EPGView() {
     return { left, width }
   }
 
+  const gridScrollRef = useRef<HTMLDivElement | null>(null)
+  const selectedDay = format(selectedDate, 'yyyy-MM-dd')
+
+  /** Scroll the timeline so the current time sits one hour from its left edge (today only). */
+  const scrollGridToNow = useCallback((element: HTMLDivElement | null) => {
+    const current = new Date()
+    if (!element || format(current, 'yyyy-MM-dd') !== selectedDay) return
+    const midnight = new Date(current)
+    midnight.setHours(0, 0, 0, 0)
+    const nowX = ((current.getTime() - midnight.getTime()) / 3_600_000) * HOUR_WIDTH
+    element.scrollLeft = Math.max(0, nowX - HOUR_WIDTH)
+  }, [selectedDay])
+
+  // Runs whenever the grid mounts (first load, day/page/filter change) and when the selected day changes.
+  const gridScrollCallbackRef = useCallback((element: HTMLDivElement | null) => {
+    gridScrollRef.current = element
+    scrollGridToNow(element)
+  }, [scrollGridToNow])
+
   const programmeTitle = (programme: Programme) => programme.titles?.[0]?.title || programme.subtitle || 'Untitled programme'
   const timeRange = (programme: Programme) => `${format(new Date(programme.start_time), 'HH:mm')}–${format(new Date(programme.stop_time), 'HH:mm')}`
-  const firstShown = allChannels.length === 0 ? 0 : (currentPage - 1) * CHANNELS_PER_PAGE + 1
-  const lastShown = Math.min(currentPage * CHANNELS_PER_PAGE, allChannels.length)
+  const firstShown = allChannels.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const lastShown = Math.min(currentPage * pageSize, allChannels.length)
   const filtered = Boolean(search) || selectedSource !== null
   const isToday = format(selectedDate, 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd')
 
@@ -158,8 +179,13 @@ export function EPGView() {
         <button type="button" className="icon-button" onClick={() => setSelectedDate((date) => addDays(date, 1))} aria-label="Next day" title="Next day">
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" className="btn btn-secondary" onClick={() => setSelectedDate(new Date())} disabled={isToday}>
-          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" /> Today
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => { if (isToday) scrollGridToNow(gridScrollRef.current); else setSelectedDate(new Date()) }}
+          title={isToday ? 'Scroll the grid to the current time' : 'Show today, scrolled to the current time'}
+        >
+          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" /> {isToday ? 'Now' : 'Today'}
         </button>
       </PageHeader>
 
@@ -172,7 +198,7 @@ export function EPGView() {
             </p>
           </div>
           <div className="toolbar-filters">
-            <label className="w-full sm:w-56">
+            <label className="w-full sm:w-48">
               <span className="sr-only">Filter by source</span>
               <select
                 className="input"
@@ -183,7 +209,7 @@ export function EPGView() {
                 {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
               </select>
             </label>
-            <label className="search-field w-full sm:w-64">
+            <label className="search-field w-full sm:w-52">
               <span className="sr-only">Search stations</span>
               <Search className="h-3.5 w-3.5" aria-hidden="true" />
               <input
@@ -193,6 +219,17 @@ export function EPGView() {
                 onChange={(event) => { setSearchInput(event.target.value); setPage(1) }}
                 placeholder="Search stations"
               />
+            </label>
+            <label className="field-inline whitespace-nowrap" title="Stations per page">
+              <span aria-hidden="true">Per page</span>
+              <span className="sr-only">Stations per page</span>
+              <select
+                className="input w-auto"
+                value={pageSize}
+                onChange={(event) => { const size = Number(event.target.value); setPageSize(size); storePageSize(PAGE_SIZE_KEY, size); setPage(1) }}
+              >
+                {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
             </label>
             <button type="button" className="icon-button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} aria-label="Previous stations" title="Previous stations">
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -222,7 +259,7 @@ export function EPGView() {
             </EmptyState>
           )
         ) : (
-          <div className="epg-scroll">
+          <div className="epg-scroll" ref={gridScrollCallbackRef}>
             <div className="epg-grid" aria-label={`Programme grid for ${format(selectedDate, 'd MMMM yyyy')}`}>
               <div className="epg-header-row">
                 <div className="epg-station-head">Station</div>

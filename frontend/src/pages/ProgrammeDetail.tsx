@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { ArrowLeft, SearchX, Tv } from 'lucide-react'
 import { api } from '../api/client'
 import { PageHeader } from '../components/ui/PageHeader'
+import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 
 export function ProgrammeDetail() {
@@ -19,6 +20,8 @@ export function ProgrammeDetail() {
     queryFn: () => api.programme(programmeId),
     enabled: validProgrammeId,
   })
+  const credits = usePagedRows(programme?.credits ?? [], 'xmltv-programme-credits-page-size', programmeId)
+  const titles = usePagedRows(programme?.titles ?? [], 'xmltv-programme-titles-page-size', programmeId)
 
   const backButton = (
     <button type="button" onClick={() => navigate(backTo)} className="btn btn-secondary">
@@ -124,7 +127,7 @@ export function ProgrammeDetail() {
             <table className="data-table">
               <thead><tr><th scope="col">Role</th><th scope="col">Name</th></tr></thead>
               <tbody>
-                {programme.credits.map((credit) => (
+                {credits.visible.map((credit) => (
                   <tr key={credit.id}>
                     <td><span className="table-text capitalize">{credit.type}</span></td>
                     <td><span className="table-text">{credit.name}</span></td>
@@ -133,6 +136,7 @@ export function ProgrammeDetail() {
               </tbody>
             </table>
           </div>
+          <Pagination {...credits.paginationProps} itemLabel="credits" />
         </section>
       )}
 
@@ -147,7 +151,7 @@ export function ProgrammeDetail() {
           <table className="data-table">
             <thead><tr><th scope="col">Language</th><th scope="col">Title</th></tr></thead>
             <tbody>
-              {programme.titles.map((title) => (
+              {titles.visible.map((title) => (
                 <tr key={title.id}>
                   <td><span className="table-text font-mono">{title.lang || '—'}</span></td>
                   <td><span className="table-text">{title.title}</span></td>
@@ -155,6 +159,7 @@ export function ProgrammeDetail() {
               ))}
             </tbody>
           </table>
+          <Pagination {...titles.paginationProps} itemLabel="titles" />
         </section>
       )}
     </>
