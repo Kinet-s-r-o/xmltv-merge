@@ -9,25 +9,79 @@ import { useFeedback } from '../components/ui/Feedback'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
 import { HEALTH_OPTIONS, formatInterval, formatTimestamp, healthBadge, healthLabel, sourceHealth, sourceSearchText } from '../lib/sourceStatus'
 import { useConfigTransfer } from '../lib/configTransfer'
 import { useTableSelection } from '../lib/tableSelection'
 import { useAuth } from '../lib/auth'
 
 const SOURCE_COLUMNS: TableColumn<Source>[] = [
-  { id: 'name', label: 'Source', kind: 'text', value: (source) => source.name },
+  {
+    id: 'name',
+    label: 'Source',
+    kind: 'text',
+    value: (source) => source.name,
+    cellClassName: 'min-w-[260px]',
+    cell: (source) => (
+      <>
+        <span className="table-text font-semibold">{source.name}</span>
+        {source.source_url && (
+          <a href={source.source_url} target="_blank" rel="noreferrer" className="cell-sub data-link font-mono break-all">
+            {source.source_url}
+          </a>
+        )}
+      </>
+    ),
+  },
   {
     id: 'status',
     label: 'Status',
     kind: 'enum',
     value: (source) => sourceHealth(source),
     options: HEALTH_OPTIONS,
+    cell: (source) => (
+      <>
+        <span className={healthBadge[sourceHealth(source)]}>{healthLabel[sourceHealth(source)]}</span>
+        {source.last_import_error && <span className="cell-sub text-error-text max-w-[320px]">{source.last_import_error}</span>}
+      </>
+    ),
   },
-  { id: 'last_import', label: 'Last import', kind: 'date', value: (source) => source.last_import_at },
-  { id: 'channels', label: 'Channels', kind: 'number', align: 'right', value: (source) => source.channel_count ?? 0 },
-  { id: 'programmes', label: 'Programmes', kind: 'number', align: 'right', value: (source) => source.programme_count ?? 0 },
-  { id: 'schedule', label: 'Schedule', kind: 'number', filterHint: 'refresh interval in minutes', value: (source) => source.refresh_interval_minutes },
+  {
+    id: 'last_import',
+    label: 'Last import',
+    kind: 'date',
+    value: (source) => source.last_import_at,
+    cell: (source) => <span className="table-text font-mono whitespace-nowrap">{formatTimestamp(source.last_import_at) ?? 'Never'}</span>,
+  },
+  {
+    id: 'channels',
+    label: 'Channels',
+    kind: 'number',
+    align: 'right',
+    value: (source) => source.channel_count ?? 0,
+    cell: (source) => <span className="table-text font-mono">{(source.channel_count ?? 0).toLocaleString()}</span>,
+  },
+  {
+    id: 'programmes',
+    label: 'Programmes',
+    kind: 'number',
+    align: 'right',
+    value: (source) => source.programme_count ?? 0,
+    cell: (source) => <span className="table-text font-mono">{(source.programme_count ?? 0).toLocaleString()}</span>,
+  },
+  {
+    id: 'schedule',
+    label: 'Schedule',
+    kind: 'number',
+    filterHint: 'refresh interval in minutes',
+    value: (source) => source.refresh_interval_minutes,
+    cell: (source) => (
+      <>
+        <span className="table-text font-mono whitespace-nowrap">every {formatInterval(source.refresh_interval_minutes)}</span>
+        <span className="cell-sub font-mono">keep {source.history_days} d</span>
+      </>
+    ),
+  },
   {
     id: 'refresh',
     label: 'Refresh',
@@ -202,7 +256,29 @@ export function Sources() {
     },
   })
 
-  const table = useTableControls(sources, SOURCE_COLUMNS, { searchText: sourceSearchText })
+  // The Refresh switch needs the activation mutation, so its cell is attached here.
+  const columns = SOURCE_COLUMNS.map((column) => (column.id !== 'refresh' ? column : {
+    ...column,
+    cell: (source: Source) => {
+      const toggling = activationMutation.isPending && activationMutation.variables?.source.id === source.id
+      return (
+        <span className="switch-control">
+          <button
+            type="button"
+            role="switch"
+            className="switch"
+            aria-checked={source.enabled}
+            aria-label={`Scheduled refresh for ${source.name}`}
+            title={source.enabled ? 'Disable scheduled refresh' : 'Enable scheduled refresh'}
+            onClick={() => activationMutation.mutate({ source, enabled: !source.enabled })}
+            disabled={toggling || !canEdit}
+          />
+          <span className="table-text">{source.enabled ? 'Enabled' : 'Disabled'}</span>
+        </span>
+      )
+    },
+  }))
+  const table = useTableControls(sources, columns, { searchText: sourceSearchText, storageKey: 'sources' })
   const filteredSources = table.rows
 
   const { visible: visibleSources, paginationProps } = usePagedRows(filteredSources, 'xmltv-sources-page-size', table.resetKey)
@@ -583,14 +659,13 @@ export function Sources() {
                       aria-keyshortcuts="Control+A Meta+A"
                     />
                   </th>
-                  {SOURCE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
-                  <th scope="col" className="text-right">Actions</th>
+                  <TableHeaderCells controls={table} />
+                  <th scope="col" className="text-right" data-column-fixed="actions">Actions</th>
+                  <ColumnVisibilityHeader controls={table} />
                 </tr>
               </thead>
               <tbody>
                 {visibleSources.map((source) => {
-                  const health = sourceHealth(source)
-                  const toggling = activationMutation.isPending && activationMutation.variables?.source.id === source.id
                   const refreshing = refreshMutation.isPending && refreshMutation.variables?.id === source.id
                   return (
                     <tr key={source.id} className={selection.isSelected(source.id) ? 'is-selected' : undefined}>
@@ -606,41 +681,8 @@ export function Sources() {
                           aria-label={`Select ${source.name}`}
                         />
                       </td>
-                      <td className="min-w-[260px]">
-                        <span className="table-text font-semibold">{source.name}</span>
-                        {source.source_url && (
-                          <a href={source.source_url} target="_blank" rel="noreferrer" className="cell-sub data-link font-mono break-all">
-                            {source.source_url}
-                          </a>
-                        )}
-                      </td>
-                      <td>
-                        <span className={healthBadge[health]}>{healthLabel[health]}</span>
-                        {source.last_import_error && <span className="cell-sub text-error-text max-w-[320px]">{source.last_import_error}</span>}
-                      </td>
-                      <td><span className="table-text font-mono whitespace-nowrap">{formatTimestamp(source.last_import_at) ?? 'Never'}</span></td>
-                      <td className="text-right"><span className="table-text font-mono">{(source.channel_count ?? 0).toLocaleString()}</span></td>
-                      <td className="text-right"><span className="table-text font-mono">{(source.programme_count ?? 0).toLocaleString()}</span></td>
-                      <td>
-                        <span className="table-text font-mono whitespace-nowrap">every {formatInterval(source.refresh_interval_minutes)}</span>
-                        <span className="cell-sub font-mono">keep {source.history_days} d</span>
-                      </td>
-                      <td>
-                        <span className="switch-control">
-                          <button
-                            type="button"
-                            role="switch"
-                            className="switch"
-                            aria-checked={source.enabled}
-                            aria-label={`Scheduled refresh for ${source.name}`}
-                            title={source.enabled ? 'Disable scheduled refresh' : 'Enable scheduled refresh'}
-                            onClick={() => activationMutation.mutate({ source, enabled: !source.enabled })}
-                            disabled={toggling || !canEdit}
-                          />
-                          <span className="table-text">{source.enabled ? 'Enabled' : 'Disabled'}</span>
-                        </span>
-                      </td>
-                      <td>
+                      <TableCells controls={table} row={source} />
+                      <td data-column-fixed="actions">
                         <div className="cell-actions">
                           {canEdit && (
                             <button
@@ -673,6 +715,7 @@ export function Sources() {
                           )}
                         </div>
                       </td>
+                      <ColumnVisibilityCell />
                     </tr>
                   )
                 })}

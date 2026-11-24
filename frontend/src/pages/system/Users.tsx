@@ -9,7 +9,7 @@ import { useFeedback } from '../../components/ui/Feedback'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
 import { useAuth } from '../../lib/auth'
 import { formatTimestamp } from '../../lib/sourceStatus'
 
@@ -46,15 +46,21 @@ const USER_COLUMNS: TableColumn<User>[] = [
     kind: 'enum',
     value: (user) => user.auth_type,
     options: [{ value: 'local', label: 'Local' }, { value: 'remote', label: 'Remote (RADIUS)' }],
+    cell: (user) => <UserTypeIndicator type={user.auth_type} />,
   },
-  { id: 'user', label: 'User', kind: 'text', value: (user) => user.username },
-  { id: 'role', label: 'Role', kind: 'text', value: (user) => user.role_name },
+  { id: 'user', label: 'User', kind: 'text', value: (user) => user.username, cellClassName: 'min-w-[220px]' },
+  { id: 'role', label: 'Role', kind: 'text', value: (user) => user.role_name, cell: (user) => <span className="table-text">{user.role_name}</span> },
   {
     id: 'status',
     label: 'Status',
     kind: 'enum',
     value: (user) => (!user.enabled ? 'disabled' : isLocked(user) ? 'locked' : 'enabled'),
     options: [{ value: 'locked', label: 'Locked' }, { value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }],
+    cell: (user) => (!user.enabled
+      ? <span className="badge">Disabled</span>
+      : isLocked(user)
+        ? <span className="badge badge-error" title={`Locked until ${formatTimestamp(user.locked_until)}`}>Locked</span>
+        : <span className="badge badge-success">Enabled</span>),
   },
   {
     id: 'totp',
@@ -62,8 +68,19 @@ const USER_COLUMNS: TableColumn<User>[] = [
     kind: 'enum',
     value: (user) => (user.totp_enabled ? 'enabled' : user.totp_required ? 'required' : 'off'),
     options: [{ value: 'required', label: 'Required, not set up' }, { value: 'enabled', label: 'Enabled' }, { value: 'off', label: 'Off' }],
+    cell: (user) => (user.totp_enabled
+      ? <span className="badge badge-success"><ShieldCheck className="h-3 w-3" aria-hidden="true" /> Enabled</span>
+      : user.totp_required
+        ? <span className="badge badge-warning">Required, not set up</span>
+        : <span className="badge">Off</span>),
   },
-  { id: 'last_login', label: 'Last sign-in', kind: 'date', value: (user) => user.last_login_at },
+  {
+    id: 'last_login',
+    label: 'Last sign-in',
+    kind: 'date',
+    value: (user) => user.last_login_at,
+    cell: (user) => <span className="table-text font-mono whitespace-nowrap">{formatTimestamp(user.last_login_at) ?? 'Never'}</span>,
+  },
 ]
 
 const userSearchText = (user: User) => [user.username, user.display_name, user.email, user.role_name].join(' ')
@@ -208,7 +225,18 @@ export function Users() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [formDirty])
 
-  const table = useTableControls(users, USER_COLUMNS, { searchText: userSearchText })
+  // The User cell marks the signed-in account, so it is attached here.
+  const columns = USER_COLUMNS.map((column) => (column.id !== 'user' ? column : {
+    ...column,
+    cell: (user: User) => (
+      <>
+        <span className="table-text font-mono font-semibold">{user.username}</span>
+        {user.id === session.user.id && <span className="badge badge-accent ml-2">You</span>}
+        {(user.display_name || user.email) && <span className="cell-sub">{[user.display_name, user.email].filter(Boolean).join(' · ')}</span>}
+      </>
+    ),
+  }))
+  const table = useTableControls(users, columns, { searchText: userSearchText, storageKey: 'users' })
   const filtered = table.rows
   const { visible, paginationProps } = usePagedRows(filtered, 'xmltv-users-page-size', table.resetKey)
   const localCount = users.filter((user) => user.auth_type === 'local').length
@@ -372,8 +400,9 @@ export function Users() {
             <table className="data-table">
               <thead>
                 <tr>
-                  {USER_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
-                  <th scope="col" className="text-right">Actions</th>
+                  <TableHeaderCells controls={table} />
+                  <th scope="col" className="text-right" data-column-fixed="actions">Actions</th>
+                  <ColumnVisibilityHeader controls={table} />
                 </tr>
               </thead>
               <tbody>
@@ -382,29 +411,8 @@ export function Users() {
                   const self = user.id === session.user.id
                   return (
                     <tr key={user.id}>
-                      <td><UserTypeIndicator type={user.auth_type} /></td>
-                      <td className="min-w-[220px]">
-                        <span className="table-text font-mono font-semibold">{user.username}</span>
-                        {self && <span className="badge badge-accent ml-2">You</span>}
-                        {(user.display_name || user.email) && <span className="cell-sub">{[user.display_name, user.email].filter(Boolean).join(' · ')}</span>}
-                      </td>
-                      <td><span className="table-text">{user.role_name}</span></td>
-                      <td>
-                        {!user.enabled
-                          ? <span className="badge">Disabled</span>
-                          : locked
-                            ? <span className="badge badge-error" title={`Locked until ${formatTimestamp(user.locked_until)}`}>Locked</span>
-                            : <span className="badge badge-success">Enabled</span>}
-                      </td>
-                      <td>
-                        {user.totp_enabled
-                          ? <span className="badge badge-success"><ShieldCheck className="h-3 w-3" aria-hidden="true" /> Enabled</span>
-                          : user.totp_required
-                            ? <span className="badge badge-warning">Required, not set up</span>
-                            : <span className="badge">Off</span>}
-                      </td>
-                      <td><span className="table-text font-mono whitespace-nowrap">{formatTimestamp(user.last_login_at) ?? 'Never'}</span></td>
-                      <td>
+                      <TableCells controls={table} row={user} />
+                      <td data-column-fixed="actions">
                         <div className="cell-actions">
                           {canEdit && locked && (
                             <button type="button" className="icon-button" onClick={() => unlockMutation.mutate(user)} disabled={unlockMutation.isPending} aria-label={`Unlock ${user.username}`} title="Unlock the account after failed sign-ins">
@@ -428,6 +436,7 @@ export function Users() {
                           )}
                         </div>
                       </td>
+                      <ColumnVisibilityCell />
                     </tr>
                   )
                 })}

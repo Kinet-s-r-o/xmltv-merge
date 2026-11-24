@@ -169,7 +169,12 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   `aria-sort`) and a 20px `.filter-toggle` that opens the 320px
   `.filter-dropdown` (operator + value rule rows, Add rule, Clear / Apply);
   active rules show as `.table-filter-chip` pills with Clear all. Paging
-  runs on the filtered, sorted rows. The full look and behaviour is the
+  runs on the filtered, sorted rows. Columns are reordered by dragging a
+  header (or Alt+Arrow, or the Columns menu) and shown/hidden in the
+  220px `.column-dropdown` opened from the trailing fixed visibility column;
+  the actions column is sticky just before it. Search, sort, filters, order
+  and hidden columns persist per table in localStorage
+  (`xmltv-table:<key>`). The full look and behaviour is the
   Kinet skill contract (`.claude/skills/ui-ux/references/components.md`
   §6.1).
 - **Row selection and bulk actions** (`useTableSelection` in

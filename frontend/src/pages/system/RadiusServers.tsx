@@ -8,7 +8,7 @@ import { useFeedback } from '../../components/ui/Feedback'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
 import { useAuth } from '../../lib/auth'
 
 const EMPTY_FORM: RadiusServerInput = {
@@ -31,10 +31,42 @@ function sameForm(a: RadiusServerInput, b: RadiusServerInput) {
 const formatAddress = (server: RadiusServer) => `${server.host.includes(':') ? `[${server.host}]` : server.host}:${server.port}`
 
 const RADIUS_COLUMNS: TableColumn<RadiusServer>[] = [
-  { id: 'priority', label: 'Priority', kind: 'number', align: 'right', value: (server) => server.priority },
-  { id: 'name', label: 'Server', kind: 'text', value: (server) => server.name },
-  { id: 'address', label: 'Address', kind: 'text', value: formatAddress },
-  { id: 'timing', label: 'Timing', kind: 'number', filterHint: 'timeout in seconds', value: (server) => server.timeout_seconds },
+  {
+    id: 'priority',
+    label: 'Priority',
+    kind: 'number',
+    align: 'right',
+    value: (server) => server.priority,
+    cell: (server) => <span className="table-text font-mono">{server.priority}</span>,
+  },
+  {
+    id: 'name',
+    label: 'Server',
+    kind: 'text',
+    value: (server) => server.name,
+    cellClassName: 'min-w-[200px]',
+    cell: (server) => (
+      <>
+        <span className="table-text font-semibold">{server.name}</span>
+        <span className="cell-sub font-mono">NAS-Identifier {server.nas_identifier}</span>
+      </>
+    ),
+  },
+  {
+    id: 'address',
+    label: 'Address',
+    kind: 'text',
+    value: formatAddress,
+    cell: (server) => <span className="table-text font-mono whitespace-nowrap">{formatAddress(server)}</span>,
+  },
+  {
+    id: 'timing',
+    label: 'Timing',
+    kind: 'number',
+    filterHint: 'timeout in seconds',
+    value: (server) => server.timeout_seconds,
+    cell: (server) => <span className="table-text font-mono whitespace-nowrap">{server.timeout_seconds} s × {server.retries + 1}</span>,
+  },
   {
     id: 'security',
     label: 'Security',
@@ -45,6 +77,12 @@ const RADIUS_COLUMNS: TableColumn<RadiusServer>[] = [
       { value: 'msg_auth_optional', label: 'Msg-Auth optional' },
       { value: 'secured', label: 'Secret stored, Msg-Auth required' },
     ],
+    cell: (server) => (
+      <span className="flex flex-wrap gap-1.5">
+        {server.has_secret ? <span className="badge badge-success">Secret stored</span> : <span className="badge badge-error">No secret</span>}
+        {server.require_message_authenticator ? <span className="badge badge-success">Msg-Auth required</span> : <span className="badge badge-warning">Msg-Auth optional</span>}
+      </span>
+    ),
   },
   {
     id: 'enabled',
@@ -142,7 +180,28 @@ export function RadiusServers() {
   const editingServer = servers.find((server) => server.id === editingId)
   const formDirty = formOpen && !sameForm(form, initialForm)
   const setField = <K extends keyof RadiusServerInput>(key: K, value: RadiusServerInput[K]) => setForm((current) => ({ ...current, [key]: value }))
-  const table = useTableControls(servers, RADIUS_COLUMNS, { searchText: radiusSearchText })
+  // The Sign-in switch needs the activation mutation (declared below; the cell only runs while rendering).
+  const columns = RADIUS_COLUMNS.map((column) => (column.id !== 'enabled' ? column : {
+    ...column,
+    cell: (server: RadiusServer) => {
+      const toggling = activationMutation.isPending && activationMutation.variables?.server.id === server.id
+      return (
+        <span className="switch-control">
+          <button
+            type="button"
+            role="switch"
+            className="switch"
+            aria-checked={server.enabled}
+            aria-label={`Use ${server.name} for sign-in`}
+            onClick={() => activationMutation.mutate({ server, enabled: !server.enabled })}
+            disabled={!canEdit || toggling}
+          />
+          <span className="table-text">{server.enabled ? 'Enabled' : 'Disabled'}</span>
+        </span>
+      )
+    },
+  }))
+  const table = useTableControls(servers, columns, { searchText: radiusSearchText, storageKey: 'radius-servers' })
   const { visible, paginationProps } = usePagedRows(table.rows, 'xmltv-radius-page-size', table.resetKey)
 
   const resetForm = () => {
@@ -367,43 +426,17 @@ export function RadiusServers() {
             <table className="data-table">
               <thead>
                 <tr>
-                  {RADIUS_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
-                  <th scope="col" className="text-right">Actions</th>
+                  <TableHeaderCells controls={table} />
+                  <th scope="col" className="text-right" data-column-fixed="actions">Actions</th>
+                  <ColumnVisibilityHeader controls={table} />
                 </tr>
               </thead>
               <tbody>
                 {visible.map((server) => {
-                  const toggling = activationMutation.isPending && activationMutation.variables?.server.id === server.id
                   return (
                     <tr key={server.id}>
-                      <td className="text-right"><span className="table-text font-mono">{server.priority}</span></td>
-                      <td className="min-w-[200px]">
-                        <span className="table-text font-semibold">{server.name}</span>
-                        <span className="cell-sub font-mono">NAS-Identifier {server.nas_identifier}</span>
-                      </td>
-                      <td><span className="table-text font-mono whitespace-nowrap">{formatAddress(server)}</span></td>
-                      <td><span className="table-text font-mono whitespace-nowrap">{server.timeout_seconds} s × {server.retries + 1}</span></td>
-                      <td>
-                        <span className="flex flex-wrap gap-1.5">
-                          {server.has_secret ? <span className="badge badge-success">Secret stored</span> : <span className="badge badge-error">No secret</span>}
-                          {server.require_message_authenticator ? <span className="badge badge-success">Msg-Auth required</span> : <span className="badge badge-warning">Msg-Auth optional</span>}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="switch-control">
-                          <button
-                            type="button"
-                            role="switch"
-                            className="switch"
-                            aria-checked={server.enabled}
-                            aria-label={`Use ${server.name} for sign-in`}
-                            onClick={() => activationMutation.mutate({ server, enabled: !server.enabled })}
-                            disabled={!canEdit || toggling}
-                          />
-                          <span className="table-text">{server.enabled ? 'Enabled' : 'Disabled'}</span>
-                        </span>
-                      </td>
-                      <td>
+                      <TableCells controls={table} row={server} />
+                      <td data-column-fixed="actions">
                         <div className="cell-actions">
                           {canEdit && (
                             <>
@@ -422,6 +455,7 @@ export function RadiusServers() {
                           )}
                         </div>
                       </td>
+                      <ColumnVisibilityCell />
                     </tr>
                   )
                 })}

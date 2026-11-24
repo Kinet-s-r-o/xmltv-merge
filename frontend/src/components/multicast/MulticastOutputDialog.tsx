@@ -13,7 +13,7 @@ import {
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { Dialog } from '../ui/Dialog'
 import { Pagination, usePagedRows } from '../ui/Pagination'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, tableColumnSpan, useTableControls, type TableColumn } from '../ui/TableControls'
 import { formatTimestamp } from '../../lib/sourceStatus'
 
 export const EMPTY_MULTICAST_OUTPUT: MulticastOutputInput = {
@@ -477,32 +477,97 @@ function StationsEditor({ outputId, rows, duplicates, onChange }: StationsEditor
     setAddChannelId('')
   }
 
-  const sourceNamesKey = sourceNames.join('\u0000')
-  const columns = useMemo<TableColumn<StationRow>[]>(() => [
-    { id: 'name', label: 'Channel name', kind: 'text', value: (r) => r.display_name },
+  const sourceOptions = sourceNames.map((name) => ({ value: name, label: name }))
+  type IdField = 'transport_stream_id' | 'original_network_id' | 'service_id'
+  const numInput = (r: StationRow, field: IdField, label: string, min: number) => {
+    const dup = (duplicates.get(tripletKey(r)) ?? 0) > 1
+    return (
+      <input type="number" min={min} max={65535} className="input input-number font-mono" value={Number.isFinite(r[field]) ? r[field] : ''}
+        aria-label={`${label} of ${r.display_name}`}
+        aria-invalid={dup || !inRange(r[field], min, 65535) || undefined}
+        title={dup ? 'Another station uses the same network / transport / service ID' : undefined}
+        onChange={(e) => update(r.key, { [field]: e.target.value === '' ? NaN : Number(e.target.value) })} />
+    )
+  }
+  const idValue = (field: IdField) => (r: StationRow) => (Number.isFinite(r[field]) ? r[field] : null)
+  // Cells are inputs bound to the editor state, so the columns are rebuilt on every render.
+  const allColumns: TableColumn<StationRow>[] = [
+    {
+      id: 'name',
+      label: 'Channel name',
+      kind: 'text',
+      value: (r) => r.display_name,
+      cellClassName: 'min-w-[180px]',
+      cell: (r) => (
+        <>
+          <input className="input" value={r.display_name} aria-label="Channel name" onChange={(e) => update(r.key, { display_name: e.target.value })} />
+          {(r.missing || r.channel_id === null) && <span className="badge badge-error mt-1">Channel missing</span>}
+        </>
+      ),
+    },
     {
       id: 'source',
       label: 'Source',
       kind: 'enum',
       value: (r) => r.source_name,
-      options: sourceNamesKey ? sourceNamesKey.split('\u0000').map((name) => ({ value: name, label: name })) : [],
+      options: sourceOptions,
+      cell: (r) => <span className="table-text">{r.source_name || '—'}</span>,
     },
-    { id: 'xml_id', label: 'Input XML id', kind: 'text', value: (r) => r.external_id },
-    { id: 'frequency', label: 'Frequency', kind: 'number', value: (r) => r.frequency },
-    { id: 'tsid', label: 'Transport ID', kind: 'number', value: (r) => (Number.isFinite(r.transport_stream_id) ? r.transport_stream_id : null) },
-    { id: 'onid', label: 'Network ID', kind: 'number', value: (r) => (Number.isFinite(r.original_network_id) ? r.original_network_id : null) },
-    { id: 'sid', label: 'Service ID', kind: 'number', value: (r) => (Number.isFinite(r.service_id) ? r.service_id : null) },
-  ], [sourceNamesKey])
-  const onColumn: TableColumn<StationRow> = useMemo(() => ({
-    id: 'enabled',
-    label: 'On',
-    kind: 'enum',
-    value: (r) => (r.enabled ? 'on' : 'off'),
-    options: [{ value: 'on', label: 'Included' }, { value: 'off', label: 'Excluded' }],
-  }), [])
-  const allColumns = useMemo(() => [...columns, onColumn], [columns, onColumn])
+    {
+      id: 'xml_id',
+      label: 'Input XML id',
+      kind: 'text',
+      value: (r) => r.external_id,
+      cell: (r) => <span className="table-text font-mono break-all">{r.external_id}</span>,
+    },
+    {
+      id: 'frequency',
+      label: 'Frequency',
+      kind: 'number',
+      value: (r) => r.frequency,
+      cell: (r) => (
+        <input type="number" min={0} className="input input-number font-mono" value={r.frequency ?? ''} aria-label={`Frequency of ${r.display_name}`}
+          onChange={(e) => update(r.key, { frequency: numberOrNull(e.target.value) })} />
+      ),
+    },
+    { id: 'tsid', label: 'Transport ID', kind: 'number', value: idValue('transport_stream_id'), cell: (r) => numInput(r, 'transport_stream_id', 'Transport stream ID', 0) },
+    { id: 'onid', label: 'Network ID', kind: 'number', value: idValue('original_network_id'), cell: (r) => numInput(r, 'original_network_id', 'Network ID', 0) },
+    { id: 'sid', label: 'Service ID', kind: 'number', value: idValue('service_id'), cell: (r) => numInput(r, 'service_id', 'Service ID', 1) },
+    {
+      id: 'now_next',
+      label: 'Now / next',
+      kind: 'text',
+      sortable: false,
+      filterable: false,
+      value: (r) => previewByKey.get(tripletKey(r))?.now?.title ?? '',
+      cellClassName: 'min-w-[180px]',
+      cell: (r) => {
+        const p = previewByKey.get(tripletKey(r))
+        if (outputId === null) return <span className="table-text text-muted">After saving</span>
+        if (!p) return <span className="table-text text-muted">Save to preview</span>
+        if (p.events === 0) return <span className="badge badge-warning">No programmes</span>
+        return (
+          <>
+            <span className="table-text">{p.now ? <><span className="font-mono">{formatTime(p.now.start)}</span> {p.now.title}</> : 'Nothing on now'}</span>
+            {p.next && <span className="cell-sub"><span className="font-mono">{formatTime(p.next.start)}</span> {p.next.title}</span>}
+          </>
+        )
+      },
+    },
+    {
+      id: 'enabled',
+      label: 'On',
+      kind: 'enum',
+      value: (r) => (r.enabled ? 'on' : 'off'),
+      options: [{ value: 'on', label: 'Included' }, { value: 'off', label: 'Excluded' }],
+      cell: (r) => (
+        <input type="checkbox" className="checkbox" checked={r.enabled} aria-label={`Include ${r.display_name} in the EIT`}
+          onChange={(e) => update(r.key, { enabled: e.target.checked })} />
+      ),
+    },
+  ]
   // Order is frozen while cells are edited, so a station does not jump away while typing.
-  const table = useTableControls(rows, allColumns, { searchText: stationSearchText, rowKey: stationKey })
+  const table = useTableControls(rows, allColumns, { searchText: stationSearchText, rowKey: stationKey, storageKey: 'multicast-stations' })
   const filtered = table.rows
   const filterActive = table.isFiltered
   const { visible, paginationProps } = usePagedRows(filtered, 'xmltv-multicast-stations-page-size', table.resetKey)
@@ -589,61 +654,25 @@ function StationsEditor({ outputId, rows, duplicates, onChange }: StationsEditor
             <table className="data-table">
               <thead>
                 <tr>
-                  {columns.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
-                  <th scope="col">Now / next</th>
-                  <ColumnHeader column={onColumn} controls={table} />
-                  <th scope="col" className="text-right">Actions</th>
+                  <TableHeaderCells controls={table} />
+                  <th scope="col" className="text-right" data-column-fixed="actions">Actions</th>
+                  <ColumnVisibilityHeader controls={table} />
                 </tr>
               </thead>
               <tbody>
                 {visible.length === 0 && (
                   <tr>
-                    <td colSpan={10}>
+                    <td colSpan={tableColumnSpan(table, 2)}>
                       <span className="table-text text-muted">No station matches the current filters. </span>
                       <button type="button" className="btn-link" onClick={table.clearAll}>Clear filters</button>
                     </td>
                   </tr>
                 )}
                 {visible.map((r) => {
-                  const dup = (duplicates.get(tripletKey(r)) ?? 0) > 1
-                  const p = previewByKey.get(tripletKey(r))
-                  const numInput = (field: 'transport_stream_id' | 'original_network_id' | 'service_id', label: string, min: number) => (
-                    <input type="number" min={min} max={65535} className="input input-number font-mono" value={Number.isFinite(r[field]) ? r[field] : ''}
-                      aria-label={`${label} of ${r.display_name}`}
-                      aria-invalid={dup || !inRange(r[field], min, 65535) || undefined}
-                      title={dup ? 'Another station uses the same network / transport / service ID' : undefined}
-                      onChange={(e) => update(r.key, { [field]: e.target.value === '' ? NaN : Number(e.target.value) })} />
-                  )
                   return (
                     <tr key={r.key}>
-                      <td className="min-w-[180px]">
-                        <input className="input" value={r.display_name} aria-label="Channel name" onChange={(e) => update(r.key, { display_name: e.target.value })} />
-                        {(r.missing || r.channel_id === null) && <span className="badge badge-error mt-1">Channel missing</span>}
-                      </td>
-                      <td><span className="table-text">{r.source_name || '—'}</span></td>
-                      <td><span className="table-text font-mono break-all">{r.external_id}</span></td>
-                      <td>
-                        <input type="number" min={0} className="input input-number font-mono" value={r.frequency ?? ''} aria-label={`Frequency of ${r.display_name}`}
-                          onChange={(e) => update(r.key, { frequency: numberOrNull(e.target.value) })} />
-                      </td>
-                      <td>{numInput('transport_stream_id', 'Transport stream ID', 0)}</td>
-                      <td>{numInput('original_network_id', 'Network ID', 0)}</td>
-                      <td>{numInput('service_id', 'Service ID', 1)}</td>
-                      <td className="min-w-[180px]">
-                        {outputId === null ? <span className="table-text text-muted">After saving</span> : !p ? <span className="table-text text-muted">Save to preview</span> : p.events === 0 ? (
-                          <span className="badge badge-warning">No programmes</span>
-                        ) : (
-                          <>
-                            <span className="table-text">{p.now ? <><span className="font-mono">{formatTime(p.now.start)}</span> {p.now.title}</> : 'Nothing on now'}</span>
-                            {p.next && <span className="cell-sub"><span className="font-mono">{formatTime(p.next.start)}</span> {p.next.title}</span>}
-                          </>
-                        )}
-                      </td>
-                      <td>
-                        <input type="checkbox" className="checkbox" checked={r.enabled} aria-label={`Include ${r.display_name} in the EIT`}
-                          onChange={(e) => update(r.key, { enabled: e.target.checked })} />
-                      </td>
-                      <td>
+                      <TableCells controls={table} row={r} />
+                      <td data-column-fixed="actions">
                         <div className="cell-actions">
                           <button type="button" className="icon-button" aria-label={`Link ${r.display_name} to another channel`} title="Link to another channel"
                             onClick={() => setRelinkKey(r.key)}>
@@ -655,6 +684,7 @@ function StationsEditor({ outputId, rows, duplicates, onChange }: StationsEditor
                           </button>
                         </div>
                       </td>
+                      <ColumnVisibilityCell />
                     </tr>
                   )
                 })}

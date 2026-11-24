@@ -6,14 +6,14 @@ import { api, type Credit, type Title } from '../api/client'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, tableColumnSpan, useTableControls, type TableColumn } from '../components/ui/TableControls'
 
 const CREDIT_COLUMNS: TableColumn<Credit>[] = [
-  { id: 'role', label: 'Role', kind: 'text', value: (credit) => credit.type },
+  { id: 'role', label: 'Role', kind: 'text', value: (credit) => credit.type, cell: (credit) => <span className="table-text capitalize">{credit.type}</span> },
   { id: 'name', label: 'Name', kind: 'text', value: (credit) => credit.name },
 ]
 const TITLE_COLUMNS: TableColumn<Title>[] = [
-  { id: 'lang', label: 'Language', kind: 'text', value: (title) => title.lang },
+  { id: 'lang', label: 'Language', kind: 'text', value: (title) => title.lang, cell: (title) => <span className="table-text font-mono">{title.lang || '—'}</span> },
   { id: 'title', label: 'Title', kind: 'text', value: (title) => title.title },
 ]
 const EMPTY_CREDITS: Credit[] = []
@@ -34,8 +34,8 @@ export function ProgrammeDetail() {
     queryFn: () => api.programme(programmeId),
     enabled: validProgrammeId,
   })
-  const creditTable = useTableControls(programme?.credits ?? EMPTY_CREDITS, CREDIT_COLUMNS, { searchText: creditSearchText })
-  const titleTable = useTableControls(programme?.titles ?? EMPTY_TITLES, TITLE_COLUMNS, { searchText: titleSearchText })
+  const creditTable = useTableControls(programme?.credits ?? EMPTY_CREDITS, CREDIT_COLUMNS, { searchText: creditSearchText, storageKey: 'programme-credits' })
+  const titleTable = useTableControls(programme?.titles ?? EMPTY_TITLES, TITLE_COLUMNS, { searchText: titleSearchText, storageKey: 'programme-titles' })
   const credits = usePagedRows(creditTable.rows, 'xmltv-programme-credits-page-size', `${programmeId}|${creditTable.resetKey}`)
   const titles = usePagedRows(titleTable.rows, 'xmltv-programme-titles-page-size', `${programmeId}|${titleTable.resetKey}`)
 
@@ -143,15 +143,15 @@ export function ProgrammeDetail() {
           <TableFilterSummary controls={creditTable} />
           <div className="table-scroll">
             <table className="data-table">
-              <thead><tr>{CREDIT_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={creditTable} />)}</tr></thead>
+              <thead><tr><TableHeaderCells controls={creditTable} /><ColumnVisibilityHeader controls={creditTable} /></tr></thead>
               <tbody>
                 {credits.visible.length === 0 && (
-                  <tr><td colSpan={2}><span className="table-text text-muted">No credit matches the current filters. </span><button type="button" className="btn-link" onClick={creditTable.clearAll}>Clear filters</button></td></tr>
+                  <tr><td colSpan={tableColumnSpan(creditTable, 1)}><span className="table-text text-muted">No credit matches the current filters. </span><button type="button" className="btn-link" onClick={creditTable.clearAll}>Clear filters</button></td></tr>
                 )}
                 {credits.visible.map((credit) => (
                   <tr key={credit.id}>
-                    <td><span className="table-text capitalize">{credit.type}</span></td>
-                    <td><span className="table-text">{credit.name}</span></td>
+                    <TableCells controls={creditTable} row={credit} />
+                    <ColumnVisibilityCell />
                   </tr>
                 ))}
               </tbody>
@@ -172,15 +172,15 @@ export function ProgrammeDetail() {
           </div>
           <TableFilterSummary controls={titleTable} />
           <table className="data-table">
-            <thead><tr>{TITLE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={titleTable} />)}</tr></thead>
+            <thead><tr><TableHeaderCells controls={titleTable} /><ColumnVisibilityHeader controls={titleTable} /></tr></thead>
             <tbody>
               {titles.visible.length === 0 && (
-                <tr><td colSpan={2}><span className="table-text text-muted">No title matches the current filters. </span><button type="button" className="btn-link" onClick={titleTable.clearAll}>Clear filters</button></td></tr>
+                <tr><td colSpan={tableColumnSpan(titleTable, 1)}><span className="table-text text-muted">No title matches the current filters. </span><button type="button" className="btn-link" onClick={titleTable.clearAll}>Clear filters</button></td></tr>
               )}
               {titles.visible.map((title) => (
                 <tr key={title.id}>
-                  <td><span className="table-text font-mono">{title.lang || '—'}</span></td>
-                  <td><span className="table-text">{title.title}</span></td>
+                  <TableCells controls={titleTable} row={title} />
+                  <ColumnVisibilityCell />
                 </tr>
               ))}
             </tbody>

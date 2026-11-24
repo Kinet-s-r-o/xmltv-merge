@@ -8,7 +8,7 @@ import { useFeedback } from '../../components/ui/Feedback'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, useTableControls, type TableColumn } from '../../components/ui/TableControls'
 import { PERMISSION_ACTIONS, SECTIONS, useAuth } from '../../lib/auth'
 
 const NONE: Permission = { full: false, read: false, edit: false, delete: false, import: false, export: false }
@@ -55,9 +55,45 @@ function summary(permissions: Permissions) {
 }
 
 const ROLE_COLUMNS: TableColumn<Role>[] = [
-  { id: 'name', label: 'Role', kind: 'text', value: (role) => role.name },
-  { id: 'access', label: 'Access', kind: 'number', filterHint: 'sections with full access', value: (role) => summary(role.permissions).full },
-  { id: 'users', label: 'Users', kind: 'number', align: 'right', value: (role) => role.user_count },
+  {
+    id: 'name',
+    label: 'Role',
+    kind: 'text',
+    value: (role) => role.name,
+    cellClassName: 'min-w-[240px]',
+    cell: (role) => (
+      <>
+        <span className="table-text font-semibold">{role.name}</span>
+        {role.builtin && <span className="badge badge-accent ml-2"><Lock className="h-3 w-3" aria-hidden="true" /> Built-in</span>}
+        {role.description && <span className="cell-sub">{role.description}</span>}
+      </>
+    ),
+  },
+  {
+    id: 'access',
+    label: 'Access',
+    kind: 'number',
+    filterHint: 'sections with full access',
+    value: (role) => summary(role.permissions).full,
+    cell: (role) => {
+      const s = summary(role.permissions)
+      return (
+        <span className="flex flex-wrap gap-1.5">
+          {s.full > 0 && <span className="badge badge-success">Full: {s.full}</span>}
+          {s.partial > 0 && <span className="badge badge-warning">Partial: {s.partial}</span>}
+          {s.none > 0 && <span className="badge">No access: {s.none}</span>}
+        </span>
+      )
+    },
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    kind: 'number',
+    align: 'right',
+    value: (role) => role.user_count,
+    cell: (role) => <span className="table-text font-mono">{role.user_count}</span>,
+  },
 ]
 
 const roleSearchText = (role: Role) => [role.name, role.description ?? '', role.builtin ? 'Built-in' : ''].join(' ')
@@ -82,7 +118,7 @@ export function Roles() {
   const editingRole = roles.find((role) => role.id === editingId)
   const readOnlyMatrix = editingRole?.builtin === true || !canEdit
   const formDirty = formOpen && !sameForm(form, initialForm)
-  const table = useTableControls(roles, ROLE_COLUMNS, { searchText: roleSearchText })
+  const table = useTableControls(roles, ROLE_COLUMNS, { searchText: roleSearchText, storageKey: 'roles' })
   const { visible, paginationProps } = usePagedRows(table.rows, 'xmltv-roles-page-size', table.resetKey)
 
   const resetForm = () => {
@@ -300,29 +336,17 @@ export function Roles() {
             <table className="data-table">
               <thead>
                 <tr>
-                  {ROLE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
-                  <th scope="col" className="text-right">Actions</th>
+                  <TableHeaderCells controls={table} />
+                  <th scope="col" className="text-right" data-column-fixed="actions">Actions</th>
+                  <ColumnVisibilityHeader controls={table} />
                 </tr>
               </thead>
               <tbody>
                 {visible.map((role) => {
-                  const s = summary(role.permissions)
                   return (
                     <tr key={role.id}>
-                      <td className="min-w-[240px]">
-                        <span className="table-text font-semibold">{role.name}</span>
-                        {role.builtin && <span className="badge badge-accent ml-2"><Lock className="h-3 w-3" aria-hidden="true" /> Built-in</span>}
-                        {role.description && <span className="cell-sub">{role.description}</span>}
-                      </td>
-                      <td>
-                        <span className="flex flex-wrap gap-1.5">
-                          {s.full > 0 && <span className="badge badge-success">Full: {s.full}</span>}
-                          {s.partial > 0 && <span className="badge badge-warning">Partial: {s.partial}</span>}
-                          {s.none > 0 && <span className="badge">No access: {s.none}</span>}
-                        </span>
-                      </td>
-                      <td className="text-right"><span className="table-text font-mono">{role.user_count}</span></td>
-                      <td>
+                      <TableCells controls={table} row={role} />
+                      <td data-column-fixed="actions">
                         <div className="cell-actions">
                           <button type="button" className="icon-button" onClick={() => openEdit(role)} aria-label={`${canEdit ? 'Edit' : 'View'} ${role.name}`} title={canEdit ? 'Edit role and permissions' : 'View permissions'}>
                             <Pencil className="h-4 w-4" aria-hidden="true" />
@@ -341,6 +365,7 @@ export function Roles() {
                           )}
                         </div>
                       </td>
+                      <ColumnVisibilityCell />
                     </tr>
                   )
                 })}

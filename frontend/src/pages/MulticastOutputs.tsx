@@ -15,7 +15,7 @@ import { useFeedback } from '../components/ui/Feedback'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
 import { saveBlob, useConfigTransfer } from '../lib/configTransfer'
 import { formatTimestamp } from '../lib/sourceStatus'
 import { useTableSelection } from '../lib/tableSelection'
@@ -80,23 +80,79 @@ export function MulticastOutputs() {
     for (const s of statusList?.outputs ?? []) map.set(s.output_id, s)
     return map
   }, [statusList])
-  const statusOf = (o: MulticastOutput) => statusById.get(o.id) ?? o.status
   const columns = useMemo<TableColumn<MulticastOutput>[]>(() => {
     const status = (o: MulticastOutput) => statusById.get(o.id) ?? o.status
+    const stateOf = (o: MulticastOutput): MulticastStreamState => status(o)?.state ?? (o.enabled ? 'starting' : 'stopped')
     return [
-      { id: 'name', label: 'Name', kind: 'text', value: (o) => o.name },
-      { id: 'address', label: 'Multicast', kind: 'text', value: (o) => `${o.multicast_address}:${o.multicast_port}` },
-      { id: 'pid', label: 'PID', kind: 'number', align: 'right', value: (o) => o.pid },
-      { id: 'chunk', label: 'Chunk (s)', kind: 'number', align: 'right', value: (o) => o.chunk_seconds },
-      { id: 'bitrate', label: 'Bitrate (kbps)', kind: 'number', align: 'right', filterHint: 'computed kbps', value: (o) => status(o)?.computed_kbps || null },
-      { id: 'timezone', label: 'Timezone', kind: 'text', value: (o) => o.timezone },
-      { id: 'stations', label: 'Stations', kind: 'number', align: 'right', value: (o) => o.service_count },
+      {
+        id: 'name',
+        label: 'Name',
+        kind: 'text',
+        value: (o) => o.name,
+        cellClassName: 'min-w-[200px]',
+        cell: (o) => (
+          <>
+            <span className="table-text font-semibold">{o.name}</span>
+            {o.description && <span className="cell-sub">{o.description}</span>}
+          </>
+        ),
+      },
+      {
+        id: 'address',
+        label: 'Multicast',
+        kind: 'text',
+        value: (o) => `${o.multicast_address}:${o.multicast_port}`,
+        cell: (o) => (
+          <>
+            <span className="table-text font-mono whitespace-nowrap">{o.multicast_address}:{o.multicast_port}</span>
+            <span className="cell-sub font-mono">TTL {o.ttl}{o.interface ? ` · ${o.interface}` : ''}</span>
+          </>
+        ),
+      },
+      { id: 'pid', label: 'PID', kind: 'number', align: 'right', value: (o) => o.pid, cell: (o) => <span className="table-text font-mono">{o.pid}</span> },
+      { id: 'chunk', label: 'Chunk (s)', kind: 'number', align: 'right', value: (o) => o.chunk_seconds, cell: (o) => <span className="table-text font-mono">{o.chunk_seconds}</span> },
+      {
+        id: 'bitrate',
+        label: 'Bitrate (kbps)',
+        kind: 'number',
+        align: 'right',
+        filterHint: 'computed kbps',
+        value: (o) => status(o)?.computed_kbps || null,
+        cell: (o) => {
+          const st = status(o)
+          return (
+            <>
+              <span className="table-text font-mono" title="Computed from the carousel">{kbps(st?.computed_kbps)}</span>
+              {stateOf(o) === 'running' && <span className="cell-sub font-mono" title="Measured over the last 5 s">sent {kbps(st?.measured_kbps)}</span>}
+            </>
+          )
+        },
+      },
+      { id: 'timezone', label: 'Timezone', kind: 'text', value: (o) => o.timezone, cell: (o) => <span className="table-text font-mono">{o.timezone}</span> },
+      { id: 'stations', label: 'Stations', kind: 'number', align: 'right', value: (o) => o.service_count, cell: (o) => <span className="table-text font-mono">{o.service_count}</span> },
       {
         id: 'stream',
         label: 'Stream',
         kind: 'enum',
-        value: (o) => status(o)?.state ?? (o.enabled ? 'starting' : 'stopped'),
+        value: stateOf,
         options: STATE_ORDER.map((state) => ({ value: state, label: STATE_LABEL[state] })),
+        cellClassName: 'max-w-[300px]',
+        cell: (o) => {
+          const st = status(o)
+          const state = stateOf(o)
+          return (
+            <>
+              <span className={STATE_BADGE[state]}>{STATE_LABEL[state]}</span>
+              {st?.last_error && <span className="cell-sub text-error-text">{st.last_error}</span>}
+              {state === 'running' && st?.last_build_at && (
+                <span className="cell-sub font-mono">{st.events.toLocaleString()} events · built {formatTimestamp(st.last_build_at)}</span>
+              )}
+              {state === 'running' && (st?.services_without_data.length ?? 0) > 0 && (
+                <span className="cell-sub text-warning-text">No programmes: {st!.services_without_data.slice(0, 4).join(', ')}{st!.services_without_data.length > 4 ? ` and ${st!.services_without_data.length - 4} more` : ''}</span>
+              )}
+            </>
+          )
+        },
       },
       {
         id: 'enabled',
@@ -159,7 +215,22 @@ export function MulticastOutputs() {
     },
   })
 
-  const table = useTableControls(outputs, columns, { searchText: multicastSearchText })
+  // The on/off switch needs the activation mutation, so its cell is attached here.
+  const tableColumns = columns.map((column) => (column.id !== 'enabled' ? column : {
+    ...column,
+    cell: (o: MulticastOutput) => {
+      const toggling = activationMutation.isPending && activationMutation.variables?.output.id === o.id
+      return (
+        <span className="switch-control">
+          <button type="button" role="switch" className="switch" aria-checked={o.enabled} disabled={toggling || !canEdit}
+            aria-label={`Stream ${o.name}`} title={o.enabled ? 'Stop streaming' : 'Start streaming'}
+            onClick={() => activationMutation.mutate({ output: o, enabled: !o.enabled })} />
+          <span className="table-text">{o.enabled ? 'On' : 'Off'}</span>
+        </span>
+      )
+    },
+  }))
+  const table = useTableControls(outputs, tableColumns, { searchText: multicastSearchText, storageKey: 'multicast-outputs' })
   const filtered = table.rows
   const { visible, paginationProps } = usePagedRows(filtered, 'xmltv-multicast-page-size', table.resetKey)
   const selection = useTableSelection(filtered, visible, outputId)
@@ -326,56 +397,21 @@ export function MulticastOutputs() {
                       checked={selection.pageState === 'all'} onChange={selection.togglePage}
                       aria-label="Select all multicast outputs on this page" title="Select all on this page (Ctrl+A)" aria-keyshortcuts="Control+A Meta+A" />
                   </th>
-                  {columns.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
-                  <th scope="col" className="text-right">Actions</th>
+                  <TableHeaderCells controls={table} />
+                  <th scope="col" className="text-right" data-column-fixed="actions">Actions</th>
+                  <ColumnVisibilityHeader controls={table} />
                 </tr>
               </thead>
               <tbody>
                 {visible.map((o) => {
-                  const st = statusOf(o)
-                  const state: MulticastStreamState = st?.state ?? (o.enabled ? 'starting' : 'stopped')
-                  const toggling = activationMutation.isPending && activationMutation.variables?.output.id === o.id
                   return (
                     <tr key={o.id} className={selection.isSelected(o.id) ? 'is-selected' : undefined}>
                       <td className="cell-select">
                         <input type="checkbox" className="checkbox" data-table-select-row checked={selection.isSelected(o.id)}
                           onChange={() => undefined} onClick={(e) => selection.toggleRow(o.id, e.shiftKey)} aria-label={`Select ${o.name}`} />
                       </td>
-                      <td className="min-w-[200px]">
-                        <span className="table-text font-semibold">{o.name}</span>
-                        {o.description && <span className="cell-sub">{o.description}</span>}
-                      </td>
-                      <td>
-                        <span className="table-text font-mono whitespace-nowrap">{o.multicast_address}:{o.multicast_port}</span>
-                        <span className="cell-sub font-mono">TTL {o.ttl}{o.interface ? ` · ${o.interface}` : ''}</span>
-                      </td>
-                      <td className="text-right"><span className="table-text font-mono">{o.pid}</span></td>
-                      <td className="text-right"><span className="table-text font-mono">{o.chunk_seconds}</span></td>
-                      <td className="text-right">
-                        <span className="table-text font-mono" title="Computed from the carousel">{kbps(st?.computed_kbps)}</span>
-                        {state === 'running' && <span className="cell-sub font-mono" title="Measured over the last 5 s">sent {kbps(st?.measured_kbps)}</span>}
-                      </td>
-                      <td><span className="table-text font-mono">{o.timezone}</span></td>
-                      <td className="text-right"><span className="table-text font-mono">{o.service_count}</span></td>
-                      <td className="max-w-[300px]">
-                        <span className={STATE_BADGE[state]}>{STATE_LABEL[state]}</span>
-                        {st?.last_error && <span className="cell-sub text-error-text">{st.last_error}</span>}
-                        {state === 'running' && st?.last_build_at && (
-                          <span className="cell-sub font-mono">{st.events.toLocaleString()} events · built {formatTimestamp(st.last_build_at)}</span>
-                        )}
-                        {state === 'running' && (st?.services_without_data.length ?? 0) > 0 && (
-                          <span className="cell-sub text-warning-text">No programmes: {st!.services_without_data.slice(0, 4).join(', ')}{st!.services_without_data.length > 4 ? ` and ${st!.services_without_data.length - 4} more` : ''}</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="switch-control">
-                          <button type="button" role="switch" className="switch" aria-checked={o.enabled} disabled={toggling || !canEdit}
-                            aria-label={`Stream ${o.name}`} title={o.enabled ? 'Stop streaming' : 'Start streaming'}
-                            onClick={() => activationMutation.mutate({ output: o, enabled: !o.enabled })} />
-                          <span className="table-text">{o.enabled ? 'On' : 'Off'}</span>
-                        </span>
-                      </td>
-                      <td>
+                      <TableCells controls={table} row={o} />
+                      <td data-column-fixed="actions">
                         <div className="cell-actions">
                           {can('multicast', 'export') && (
                             <button type="button" className="icon-button" onClick={() => void downloadDump(o)} disabled={dumpingId === o.id}
@@ -395,6 +431,7 @@ export function MulticastOutputs() {
                           )}
                         </div>
                       </td>
+                      <ColumnVisibilityCell />
                     </tr>
                   )
                 })}

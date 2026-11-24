@@ -4,21 +4,53 @@ import { Database, Search, Upload } from 'lucide-react'
 import { api, type Source } from '../api/client'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
 import { HEALTH_OPTIONS, formatTimestamp, healthBadge, healthLabel, sourceHealth, sourceSearchText } from '../lib/sourceStatus'
 
 const SOURCE_COLUMNS: TableColumn<Source>[] = [
-  { id: 'name', label: 'Source', kind: 'text', value: (source) => source.name },
+  {
+    id: 'name',
+    label: 'Source',
+    kind: 'text',
+    value: (source) => source.name,
+    cell: (source) => (
+      <>
+        <span className="table-text font-semibold">{source.name}</span>
+        {source.last_import_error && <span className="cell-sub text-error-text">{source.last_import_error}</span>}
+      </>
+    ),
+  },
   {
     id: 'status',
     label: 'Status',
     kind: 'enum',
     value: (source) => sourceHealth(source),
     options: HEALTH_OPTIONS,
+    cell: (source) => <span className={healthBadge[sourceHealth(source)]}>{healthLabel[sourceHealth(source)]}</span>,
   },
-  { id: 'channels', label: 'Channels', kind: 'number', align: 'right', value: (source) => source.channel_count ?? 0 },
-  { id: 'programmes', label: 'Programmes', kind: 'number', align: 'right', value: (source) => source.programme_count ?? 0 },
-  { id: 'last_import', label: 'Last import', kind: 'date', value: (source) => source.last_import_at },
+  {
+    id: 'channels',
+    label: 'Channels',
+    kind: 'number',
+    align: 'right',
+    value: (source) => source.channel_count ?? 0,
+    cell: (source) => <span className="table-text font-mono">{(source.channel_count ?? 0).toLocaleString()}</span>,
+  },
+  {
+    id: 'programmes',
+    label: 'Programmes',
+    kind: 'number',
+    align: 'right',
+    value: (source) => source.programme_count ?? 0,
+    cell: (source) => <span className="table-text font-mono">{(source.programme_count ?? 0).toLocaleString()}</span>,
+  },
+  {
+    id: 'last_import',
+    label: 'Last import',
+    kind: 'date',
+    value: (source) => source.last_import_at,
+    cell: (source) => <span className="table-text font-mono whitespace-nowrap">{formatTimestamp(source.last_import_at) ?? 'Never'}</span>,
+  },
 ]
 
 
@@ -28,7 +60,7 @@ export function Dashboard() {
     queryFn: () => api.sources(),
   })
   const sources = data ?? []
-  const table = useTableControls(sources, SOURCE_COLUMNS, { searchText: sourceSearchText })
+  const table = useTableControls(sources, SOURCE_COLUMNS, { searchText: sourceSearchText, storageKey: 'dashboard-sources' })
   const { visible: visibleSources, paginationProps } = usePagedRows(table.rows, 'xmltv-dashboard-sources-page-size', table.resetKey)
 
   const totalChannels = sources.reduce((sum, s) => sum + (s.channel_count ?? 0), 0)
@@ -115,25 +147,17 @@ export function Dashboard() {
             <table className="data-table">
               <thead>
                 <tr>
-                  {SOURCE_COLUMNS.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
+                  <TableHeaderCells controls={table} />
+                  <ColumnVisibilityHeader controls={table} />
                 </tr>
               </thead>
               <tbody>
-                {visibleSources.map((source) => {
-                  const health = sourceHealth(source)
-                  return (
-                    <tr key={source.id}>
-                      <td>
-                        <span className="table-text font-semibold">{source.name}</span>
-                        {source.last_import_error && <span className="cell-sub text-error-text">{source.last_import_error}</span>}
-                      </td>
-                      <td><span className={healthBadge[health]}>{healthLabel[health]}</span></td>
-                      <td className="text-right"><span className="table-text font-mono">{(source.channel_count ?? 0).toLocaleString()}</span></td>
-                      <td className="text-right"><span className="table-text font-mono">{(source.programme_count ?? 0).toLocaleString()}</span></td>
-                      <td><span className="table-text font-mono whitespace-nowrap">{formatTimestamp(source.last_import_at) ?? 'Never'}</span></td>
-                    </tr>
-                  )
-                })}
+                {visibleSources.map((source) => (
+                  <tr key={source.id}>
+                    <TableCells controls={table} row={source} />
+                    <ColumnVisibilityCell />
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

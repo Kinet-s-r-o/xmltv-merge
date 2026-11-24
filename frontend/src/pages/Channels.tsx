@@ -7,7 +7,7 @@ import { StationScheduleDialog } from '../components/channels/StationScheduleDia
 import { PageHeader } from '../components/ui/PageHeader'
 import { Pagination, usePagedRows } from '../components/ui/Pagination'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
-import { ColumnHeader, TableFilterSummary, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
+import { ColumnVisibilityCell, ColumnVisibilityHeader, TableCells, TableFilterSummary, TableHeaderCells, TableSearch, useTableControls, type TableColumn } from '../components/ui/TableControls'
 
 const PAGE_SIZE_KEY = 'xmltv-channels-page-size'
 
@@ -21,8 +21,6 @@ export function Channels() {
   const sources = useMemo(() => sourceData ?? [], [sourceData])
   const sourceNames = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
 
-  const sourceName = (channel: Channel) => sourceNames.get(channel.source_id) ?? `Source #${channel.source_id}`
-
   // All channels are loaded once; search, column filters and sorting run client-side.
   const { data: channelData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['channels'],
@@ -30,21 +28,43 @@ export function Channels() {
   })
   const channels = useMemo(() => channelData ?? [], [channelData])
   const columns = useMemo<TableColumn<Channel>[]>(() => [
-    { id: 'name', label: 'Channel', kind: 'text', value: (channel) => channel.name },
-    { id: 'external_id', label: 'XMLTV ID', kind: 'text', value: (channel) => channel.external_id },
+    {
+      id: 'name',
+      label: 'Channel',
+      kind: 'text',
+      value: (channel) => channel.name,
+      cell: (channel) => (
+        <span className="flex min-w-0 items-center gap-3">
+          {channel.icon_url
+            ? <img src={channel.icon_url} alt="" className="channel-logo" loading="lazy" />
+            : <span className="channel-logo" aria-hidden="true">{channel.name.charAt(0).toUpperCase()}</span>}
+          <button type="button" className="btn-link table-text font-medium" onClick={() => setScheduleChannel(channel)} title="Show this station's schedule">
+            {channel.name}
+          </button>
+        </span>
+      ),
+    },
+    {
+      id: 'external_id',
+      label: 'XMLTV ID',
+      kind: 'text',
+      value: (channel) => channel.external_id,
+      cell: (channel) => <span className="table-text font-mono break-all">{channel.external_id}</span>,
+    },
     {
       id: 'source',
       label: 'Source',
       kind: 'enum',
       value: (channel) => String(channel.source_id),
       options: sources.map((source) => ({ value: String(source.id), label: source.name })),
+      cell: (channel) => <span className="table-text">{sourceNames.get(channel.source_id) ?? `Source #${channel.source_id}`}</span>,
     },
-  ], [sources])
+  ], [sources, sourceNames])
   const searchText = useMemo(
     () => (channel: Channel) => [channel.name, channel.external_id, sourceNames.get(channel.source_id) ?? ''].join(' '),
     [sourceNames],
   )
-  const table = useTableControls(channels, columns, { searchText })
+  const table = useTableControls(channels, columns, { searchText, storageKey: 'channels' })
   const { visible, paginationProps } = usePagedRows(table.rows, PAGE_SIZE_KEY, table.resetKey)
 
   return (
@@ -92,26 +112,16 @@ export function Channels() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    {columns.map((column) => <ColumnHeader key={column.id} column={column} controls={table} />)}
-                    <th scope="col" className="text-right">Schedule</th>
+                    <TableHeaderCells controls={table} />
+                    <th scope="col" className="text-right" data-column-fixed="actions">Schedule</th>
+                    <ColumnVisibilityHeader controls={table} />
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((channel) => (
                     <tr key={channel.id}>
-                      <td>
-                        <span className="flex min-w-0 items-center gap-3">
-                          {channel.icon_url
-                            ? <img src={channel.icon_url} alt="" className="channel-logo" loading="lazy" />
-                            : <span className="channel-logo" aria-hidden="true">{channel.name.charAt(0).toUpperCase()}</span>}
-                          <button type="button" className="btn-link table-text font-medium" onClick={() => setScheduleChannel(channel)} title="Show this station's schedule">
-                            {channel.name}
-                          </button>
-                        </span>
-                      </td>
-                      <td><span className="table-text font-mono break-all">{channel.external_id}</span></td>
-                      <td><span className="table-text">{sourceName(channel)}</span></td>
-                      <td>
+                      <TableCells controls={table} row={channel} />
+                      <td data-column-fixed="actions">
                         <div className="cell-actions">
                           <button
                             type="button"
@@ -124,6 +134,7 @@ export function Channels() {
                           </button>
                         </div>
                       </td>
+                      <ColumnVisibilityCell />
                     </tr>
                   ))}
                 </tbody>
