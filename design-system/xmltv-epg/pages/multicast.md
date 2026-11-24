@@ -2,7 +2,7 @@
 
 Overrides [`../MASTER.md`](../MASTER.md) only for the multicast output editor.
 
-- **Wide editor dialog with tabs.** Create/edit uses a `wide` `Dialog` with a
+- **Wide editor dialog with tabs.** Create/edit uses a `full` (1600 px) `Dialog` so the station table fits without horizontal scrolling on desktop, with a
   `.tab-bar` (`role="tablist"`): "Stream settings" (four-column `.field` grid)
   and "Stations (N)". A tab with invalid values shows an error badge with
   text ("Check", "N invalid"), so problems on the hidden tab stay visible.

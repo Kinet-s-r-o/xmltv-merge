@@ -171,7 +171,7 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   warn on page unload, and end with one summary notification listing
   failures and skipped records.
 - **Dialogs:** `Dialog` sizes small 420 / medium 560 / large 880 / wide 1120
-  (the Kinet side-panel width, for timelines such as the station schedule); Cancel is
+  (the Kinet side-panel width, for timelines such as the station schedule) / full 1600 (wide editable tables, e.g. multicast stations); Cancel is
   `.btn-secondary`, confirm `.btn-primary` or `.btn-danger`. Not draggable or
   resizable (Kinet's drag/resize affordance is not adopted in this app).
   Dialogs may stack (e.g. a confirm over a form); only the top one handles

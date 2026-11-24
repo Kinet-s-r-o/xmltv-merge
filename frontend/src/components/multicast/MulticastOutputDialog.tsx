@@ -198,7 +198,7 @@ export function MulticastOutputDialog({ open, output, initial, saving, error, on
     <>
       <Dialog
         open={open}
-        size="wide"
+        size="full"
         busy={saving}
         title={
           <span className="inline-flex items-center gap-2">
@@ -593,7 +593,7 @@ function StationsEditor({ outputId, rows, duplicates, onChange }: StationsEditor
                 <th scope="col">
                   <label>
                     <span className="sr-only">Filter by source</span>
-                    <select className="input" value={filters.source} onChange={(e) => setFilters((f) => ({ ...f, source: e.target.value }))}>
+                    <select className="input min-w-[140px]" value={filters.source} onChange={(e) => setFilters((f) => ({ ...f, source: e.target.value }))}>
                       <option value="">All sources</option>
                       {sourceNames.map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
