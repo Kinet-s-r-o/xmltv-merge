@@ -18,6 +18,7 @@ import { EmptyState, LoadingState, ResourceError, errorMessage } from '../compon
 import { saveBlob, useConfigTransfer } from '../lib/configTransfer'
 import { formatTimestamp } from '../lib/sourceStatus'
 import { useTableSelection } from '../lib/tableSelection'
+import { useAuth } from '../lib/auth'
 
 const STATE_LABEL: Record<MulticastStreamState, string> = {
   running: 'Streaming',
@@ -46,6 +47,9 @@ function kbps(value?: number) {
 }
 
 export function MulticastOutputs() {
+  const { can } = useAuth()
+  const canEdit = can('multicast', 'edit')
+  const canDelete = can('multicast', 'delete')
   const queryClient = useQueryClient()
   const { notify } = useFeedback()
   const [search, setSearch] = useState('')
@@ -195,17 +199,23 @@ export function MulticastOutputs() {
         description="DVB EIT streams for DVB-C modulators. Each output sends present/following and schedule tables of its stations to a UDP multicast group."
       >
         <input {...transfer.inputProps} />
-        <button type="button" className="btn btn-secondary btn-icon" onClick={transfer.openPicker} disabled={transfer.state.status !== 'closed'}
-          aria-label="Import multicast outputs from XML" title="Import multicast outputs from XML — add or update outputs and stations from a configuration file">
-          <Upload className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button type="button" className="btn btn-secondary btn-icon" onClick={transfer.exportNow} disabled={transfer.exporting || outputs.length === 0}
-          aria-label={transfer.exporting ? 'Exporting multicast outputs…' : 'Export multicast outputs to XML'} title="Export multicast outputs to XML — download outputs with their stations">
-          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
-        </button>
-        <button type="button" className="btn btn-primary" onClick={openCreate}>
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add multicast output
-        </button>
+        {can('multicast', 'import') && (
+          <button type="button" className="btn btn-secondary btn-icon" onClick={transfer.openPicker} disabled={transfer.state.status !== 'closed'}
+            aria-label="Import multicast outputs from XML" title="Import multicast outputs from XML — add or update outputs and stations from a configuration file">
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+        {can('multicast', 'export') && (
+          <button type="button" className="btn btn-secondary btn-icon" onClick={transfer.exportNow} disabled={transfer.exporting || outputs.length === 0}
+            aria-label={transfer.exporting ? 'Exporting multicast outputs…' : 'Export multicast outputs to XML'} title="Export multicast outputs to XML — download outputs with their stations">
+            {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        )}
+        {canEdit && (
+          <button type="button" className="btn btn-primary" onClick={openCreate}>
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add multicast output
+          </button>
+        )}
       </PageHeader>
 
       {statusList && !statusList.streaming_enabled && (
@@ -251,10 +261,12 @@ export function MulticastOutputs() {
               {selection.count < filtered.length && <button type="button" className="btn-link" onClick={selection.selectAll}>Select all {filtered.length}</button>}
             </p>
             <div className="bulk-bar-actions">
-              <button type="button" className="btn btn-danger btn-xs" aria-keyshortcuts="Delete" onClick={() => setDeleteTargets(selection.selectedRows)}
-                title="Delete the selected outputs and stop their streams (Delete)">
-                <Trash2 className="h-3 w-3" aria-hidden="true" /> Delete ({selection.count})
-              </button>
+              {canDelete && (
+                <button type="button" className="btn btn-danger btn-xs" aria-keyshortcuts="Delete" onClick={() => setDeleteTargets(selection.selectedRows)}
+                  title="Delete the selected outputs and stop their streams (Delete)">
+                  <Trash2 className="h-3 w-3" aria-hidden="true" /> Delete ({selection.count})
+                </button>
+              )}
               <button type="button" className="btn btn-secondary btn-xs" onClick={selection.clear}>
                 <X className="h-3 w-3" aria-hidden="true" /> Clear selection
               </button>
@@ -269,14 +281,14 @@ export function MulticastOutputs() {
         ) : outputs.length === 0 ? (
           <EmptyState icon={RadioTower} title="No multicast outputs configured"
             message="Add an output with the multicast group of your DVB-C modulator, then map imported channels to their transport stream, network and service IDs.">
-            <button type="button" className="btn btn-primary" onClick={openCreate}><Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add multicast output</button>
+            {canEdit && <button type="button" className="btn btn-primary" onClick={openCreate}><Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add multicast output</button>}
           </EmptyState>
         ) : filtered.length === 0 ? (
           <EmptyState icon={Search} title="No multicast output matches the search" message="Clear the search to see all outputs.">
             <button type="button" className="btn btn-secondary" onClick={() => setSearch('')}>Clear search</button>
           </EmptyState>
         ) : (
-          <div className="table-scroll" onKeyDown={selection.tableKeyDown(() => setDeleteTargets(selection.selectedRows))}>
+          <div className="table-scroll" onKeyDown={selection.tableKeyDown(() => { if (canDelete) setDeleteTargets(selection.selectedRows) })}>
             <table className="data-table" aria-describedby="multicast-selection-hint">
               <thead>
                 <tr>
@@ -337,7 +349,7 @@ export function MulticastOutputs() {
                       </td>
                       <td>
                         <span className="switch-control">
-                          <button type="button" role="switch" className="switch" aria-checked={o.enabled} disabled={toggling}
+                          <button type="button" role="switch" className="switch" aria-checked={o.enabled} disabled={toggling || !canEdit}
                             aria-label={`Stream ${o.name}`} title={o.enabled ? 'Stop streaming' : 'Start streaming'}
                             onClick={() => activationMutation.mutate({ output: o, enabled: !o.enabled })} />
                           <span className="table-text">{o.enabled ? 'On' : 'Off'}</span>
@@ -345,18 +357,22 @@ export function MulticastOutputs() {
                       </td>
                       <td>
                         <div className="cell-actions">
-                          <button type="button" className="icon-button" onClick={() => void downloadDump(o)} disabled={dumpingId === o.id}
-                            aria-label={`Download TS dump of ${o.name}`} title="Download one EIT cycle as a .ts file">
-                            {dumpingId === o.id ? <span className="spinner spinner-sm" aria-hidden="true" /> : <FileVideo className="h-4 w-4" aria-hidden="true" />}
-                          </button>
+                          {can('multicast', 'export') && (
+                            <button type="button" className="icon-button" onClick={() => void downloadDump(o)} disabled={dumpingId === o.id}
+                              aria-label={`Download TS dump of ${o.name}`} title="Download one EIT cycle as a .ts file">
+                              {dumpingId === o.id ? <span className="spinner spinner-sm" aria-hidden="true" /> : <FileVideo className="h-4 w-4" aria-hidden="true" />}
+                            </button>
+                          )}
                           <button type="button" className="icon-button" onClick={() => void openEdit(o)} disabled={loadingEditId === o.id}
                             aria-label={`Edit ${o.name}`} title="Edit settings and stations">
                             {loadingEditId === o.id ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Pencil className="h-4 w-4" aria-hidden="true" />}
                           </button>
-                          <button type="button" className="icon-button is-danger" onClick={() => setDeleteTargets([o])}
-                            aria-label={`Delete ${o.name}`} title="Delete output and stop its stream">
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </button>
+                          {canDelete && (
+                            <button type="button" className="icon-button is-danger" onClick={() => setDeleteTargets([o])}
+                              aria-label={`Delete ${o.name}`} title="Delete output and stop its stream">
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

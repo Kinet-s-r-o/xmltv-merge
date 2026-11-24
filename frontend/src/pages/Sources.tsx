@@ -12,6 +12,7 @@ import { EmptyState, LoadingState, ResourceError, errorMessage } from '../compon
 import { formatInterval, formatTimestamp, healthBadge, healthLabel, sourceHealth } from '../lib/sourceStatus'
 import { useConfigTransfer } from '../lib/configTransfer'
 import { useTableSelection } from '../lib/tableSelection'
+import { useAuth } from '../lib/auth'
 
 type SourceStatusFilter = 'all' | 'healthy' | 'attention' | 'disabled'
 
@@ -55,6 +56,9 @@ function matchesStatus(source: Source, filter: SourceStatusFilter) {
 }
 
 export function Sources() {
+  const { can } = useAuth()
+  const canEdit = can('sources', 'edit')
+  const canDelete = can('sources', 'delete')
   const queryClient = useQueryClient()
   const { notify } = useFeedback()
   const [formOpen, setFormOpen] = useState(false)
@@ -295,29 +299,35 @@ export function Sources() {
         description="XMLTV URLs imported on a schedule. Disabled sources keep their stored guide data but are not refreshed."
       >
         <input {...transfer.inputProps} />
-        <button
-          type="button"
-          className="btn btn-secondary btn-icon"
-          onClick={transfer.openPicker}
-          disabled={transfer.state.status !== 'closed'}
-          aria-label="Import sources from XML"
-          title="Import sources from XML — add or update sources from a configuration file"
-        >
-          <Upload className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-icon"
-          onClick={transfer.exportNow}
-          disabled={transfer.exporting || sources.length === 0}
-          aria-label={transfer.exporting ? 'Exporting sources…' : 'Export sources to XML'}
-          title="Export sources to XML — download the source configuration"
-        >
-          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source
-        </button>
+        {can('sources', 'import') && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-icon"
+            onClick={transfer.openPicker}
+            disabled={transfer.state.status !== 'closed'}
+            aria-label="Import sources from XML"
+            title="Import sources from XML — add or update sources from a configuration file"
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+        {can('sources', 'export') && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-icon"
+            onClick={transfer.exportNow}
+            disabled={transfer.exporting || sources.length === 0}
+            aria-label={transfer.exporting ? 'Exporting sources…' : 'Export sources to XML'}
+            title="Export sources to XML — download the source configuration"
+          >
+            {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        )}
+        {canEdit && (
+          <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source
+          </button>
+        )}
       </PageHeader>
 
       <SourceImportDialog
@@ -509,24 +519,28 @@ export function Sources() {
                 </button>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-xs"
-                    onClick={() => void bulkRefresh()}
-                    disabled={selectedRefreshable.length === 0}
-                    title={selectedRefreshable.length < selection.count ? 'Disabled sources in the selection are skipped' : 'Download and import every selected source now, one after another'}
-                  >
-                    <RefreshCw className="h-3 w-3" aria-hidden="true" /> Download &amp; import ({selectedRefreshable.length})
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-xs"
-                    onClick={() => setBulkDeleteOpen(true)}
-                    aria-keyshortcuts="Delete"
-                    title="Delete the selected sources with their channels and programmes (Delete)"
-                  >
-                    <Trash2 className="h-3 w-3" aria-hidden="true" /> Delete ({selection.count})
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-xs"
+                      onClick={() => void bulkRefresh()}
+                      disabled={selectedRefreshable.length === 0}
+                      title={selectedRefreshable.length < selection.count ? 'Disabled sources in the selection are skipped' : 'Download and import every selected source now, one after another'}
+                    >
+                      <RefreshCw className="h-3 w-3" aria-hidden="true" /> Download &amp; import ({selectedRefreshable.length})
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-xs"
+                      onClick={() => setBulkDeleteOpen(true)}
+                      aria-keyshortcuts="Delete"
+                      title="Delete the selected sources with their channels and programmes (Delete)"
+                    >
+                      <Trash2 className="h-3 w-3" aria-hidden="true" /> Delete ({selection.count})
+                    </button>
+                  )}
                   <button type="button" className="btn btn-secondary btn-xs" onClick={selection.clear}>
                     <X className="h-3 w-3" aria-hidden="true" /> Clear selection
                   </button>
@@ -546,16 +560,18 @@ export function Sources() {
             title="No XMLTV sources configured"
             message="Add a source with its XMLTV URL. Channels and programmes become available in the EPG grid after the first import."
           >
-            <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source
-            </button>
+            {canEdit && (
+              <button type="button" className="btn btn-primary" onClick={() => openForm(EMPTY_FORM, null)}>
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add source
+              </button>
+            )}
           </EmptyState>
         ) : filteredSources.length === 0 ? (
           <EmptyState icon={Search} title="No sources match the current filters" message="Clear the search or choose All statuses.">
             <button type="button" className="btn btn-secondary" onClick={() => { setSourceSearch(''); setStatusFilter('all') }}>Clear filters</button>
           </EmptyState>
         ) : (
-          <div className="table-scroll" onKeyDown={bulkBusy ? undefined : selection.tableKeyDown(() => setBulkDeleteOpen(true))}>
+          <div className="table-scroll" onKeyDown={bulkBusy ? undefined : selection.tableKeyDown(() => { if (canDelete) setBulkDeleteOpen(true) })}>
             <table className="data-table" aria-describedby="sources-selection-hint">
               <thead>
                 <tr>
@@ -631,36 +647,42 @@ export function Sources() {
                             aria-label={`Scheduled refresh for ${source.name}`}
                             title={source.enabled ? 'Disable scheduled refresh' : 'Enable scheduled refresh'}
                             onClick={() => activationMutation.mutate({ source, enabled: !source.enabled })}
-                            disabled={toggling}
+                            disabled={toggling || !canEdit}
                           />
                           <span className="table-text">{source.enabled ? 'Enabled' : 'Disabled'}</span>
                         </span>
                       </td>
                       <td>
                         <div className="cell-actions">
-                          <button
-                            type="button"
-                            className="icon-button"
-                            onClick={() => refreshMutation.mutate(source)}
-                            disabled={refreshing || bulkBusy}
-                            aria-label={`Refresh ${source.name} now`}
-                            title="Download and import now"
-                          >
-                            <RefreshCw className={`h-4 w-4${refreshing ? ' animate-spin' : ''}`} aria-hidden="true" />
-                          </button>
-                          <button type="button" className="icon-button" onClick={() => handleEdit(source)} aria-label={`Edit ${source.name}`} title="Edit source">
-                            <Pencil className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button is-danger"
-                            onClick={() => setDeleteTarget(source)}
-                            disabled={deleteMutation.isPending || bulkBusy}
-                            aria-label={`Delete ${source.name}`}
-                            title="Delete source with its channels and programmes"
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="icon-button"
+                              onClick={() => refreshMutation.mutate(source)}
+                              disabled={refreshing || bulkBusy}
+                              aria-label={`Refresh ${source.name} now`}
+                              title="Download and import now"
+                            >
+                              <RefreshCw className={`h-4 w-4${refreshing ? ' animate-spin' : ''}`} aria-hidden="true" />
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button type="button" className="icon-button" onClick={() => handleEdit(source)} aria-label={`Edit ${source.name}`} title="Edit source">
+                              <Pencil className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              className="icon-button is-danger"
+                              onClick={() => setDeleteTarget(source)}
+                              disabled={deleteMutation.isPending || bulkBusy}
+                              aria-label={`Delete ${source.name}`}
+                              title="Delete source with its channels and programmes"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

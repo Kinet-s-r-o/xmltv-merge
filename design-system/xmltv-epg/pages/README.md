@@ -6,8 +6,9 @@ exception to the project master. Keep the override narrow and link it back to
 
 Active overrides: [`epg.md`](epg.md) (programme timeline),
 [`channels.md`](channels.md) (station schedule dialog),
-[`outputs.md`](outputs.md) (feed editor) and
-[`multicast.md`](multicast.md) (multicast output editor). Other routes (`dashboard`,
+[`outputs.md`](outputs.md) (feed editor),
+[`multicast.md`](multicast.md) (multicast output editor) and
+[`system.md`](system.md) (users, roles, RADIUS servers, my account). Other routes (`dashboard`,
 `sources`, `programme-detail`) follow the master unchanged. An override never replaces the
 master accessibility, responsive, interaction, or security rules unless the
 change is explicitly reviewed and the master is updated too.

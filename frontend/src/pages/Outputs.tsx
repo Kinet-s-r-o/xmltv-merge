@@ -8,6 +8,7 @@ import { useFeedback } from '../components/ui/Feedback'
 import { PageHeader } from '../components/ui/PageHeader'
 import { EmptyState, LoadingState, ResourceError, errorMessage } from '../components/ui/ResourceState'
 import { useConfigTransfer } from '../lib/configTransfer'
+import { useAuth } from '../lib/auth'
 
 const defaultItems = (): Omit<OutputChannel, 'channel_id' | 'display_name'> => ({
   include_title: true, include_subtitle: true, include_description: true, include_credits: true,
@@ -28,6 +29,8 @@ const minimalItems = (): ReturnType<typeof defaultItems> => ({
 const outputSnapshot = (name: string, channels: OutputChannel[]) => JSON.stringify({ name, channels })
 
 export function Outputs() {
+  const { can } = useAuth()
+  const canEdit = can('outputs', 'edit')
   const queryClient = useQueryClient()
   const { notify } = useFeedback()
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -150,29 +153,35 @@ export function Outputs() {
         description="Aggregated XMLTV feeds built from channels of any source. Each feed has a token-protected public URL for customers."
       >
         <input {...transfer.inputProps} />
-        <button
-          type="button"
-          className="btn btn-secondary btn-icon"
-          onClick={transfer.openPicker}
-          disabled={transfer.state.status !== 'closed' || isDirty}
-          aria-label="Import outputs from XML"
-          title={isDirty ? 'Save or discard the changes to the open output before importing' : 'Import outputs from XML — add or update outputs from a configuration file'}
-        >
-          <Upload className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-icon"
-          onClick={transfer.exportNow}
-          disabled={transfer.exporting || outputs.length === 0}
-          aria-label={transfer.exporting ? 'Exporting outputs…' : 'Export outputs to XML'}
-          title="Export outputs to XML — every output's channels and field rules, without feed tokens"
-        >
-          {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
-        </button>
-        <button type="button" className="btn btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-          {createMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />} Add output
-        </button>
+        {can('outputs', 'import') && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-icon"
+            onClick={transfer.openPicker}
+            disabled={transfer.state.status !== 'closed' || isDirty}
+            aria-label="Import outputs from XML"
+            title={isDirty ? 'Save or discard the changes to the open output before importing' : 'Import outputs from XML — add or update outputs from a configuration file'}
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+        {can('outputs', 'export') && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-icon"
+            onClick={transfer.exportNow}
+            disabled={transfer.exporting || outputs.length === 0}
+            aria-label={transfer.exporting ? 'Exporting outputs…' : 'Export outputs to XML'}
+            title="Export outputs to XML — every output's channels and field rules, without feed tokens"
+          >
+            {transfer.exporting ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        )}
+        {canEdit && (
+          <button type="button" className="btn btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+            {createMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />} Add output
+          </button>
+        )}
       </PageHeader>
 
       <OutputImportDialog
@@ -247,16 +256,22 @@ export function Outputs() {
                       <input className="input" value={draftName} onChange={(event) => setDraftName(event.target.value)} />
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => setConfirmDelete(true)} className="btn btn-danger">
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
-                      </button>
-                      <a href={`/api/v1/outputs/${selected.id}/xml`} target="_blank" rel="noreferrer" className="btn btn-secondary">
-                        <Download className="h-3.5 w-3.5" aria-hidden="true" /> Preview XML
-                      </a>
-                      <button type="button" onClick={() => saveMutation.mutate()} disabled={!draftName.trim() || saveMutation.isPending || !isDirty} className="btn btn-primary">
-                        {saveMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Save className="h-3.5 w-3.5" aria-hidden="true" />}
-                        {saveMutation.isPending ? 'Saving…' : 'Save changes'}
-                      </button>
+                      {can('outputs', 'delete') && (
+                        <button type="button" onClick={() => setConfirmDelete(true)} className="btn btn-danger">
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
+                        </button>
+                      )}
+                      {can('outputs', 'export') && (
+                        <a href={`/api/v1/outputs/${selected.id}/xml`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+                          <Download className="h-3.5 w-3.5" aria-hidden="true" /> Preview XML
+                        </a>
+                      )}
+                      {canEdit && (
+                        <button type="button" onClick={() => saveMutation.mutate()} disabled={!draftName.trim() || saveMutation.isPending || !isDirty} className="btn btn-primary">
+                          {saveMutation.isPending ? <span className="spinner spinner-sm" aria-hidden="true" /> : <Save className="h-3.5 w-3.5" aria-hidden="true" />}
+                          {saveMutation.isPending ? 'Saving…' : 'Save changes'}
+                        </button>
+                      )}
                     </div>
                   </div>
                   <label className="field">

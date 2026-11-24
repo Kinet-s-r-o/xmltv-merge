@@ -11,4 +11,5 @@
 | What is the source configuration export/import format? | [`../source-config-format.md`](../source-config-format.md) | Versioned XML schema, endpoints and matching rules. |
 | What is the output configuration export/import format? | [`../output-config-format.md`](../output-config-format.md) | Portable channel references, no tokens, missing-channel reporting. |
 | What visual rules apply to UI work? | [`../../design-system/xmltv-epg/MASTER.md`](../../design-system/xmltv-epg/MASTER.md) | Project-wide visual source of truth; route-specific exceptions are under its `pages/` directory. |
+| How do sign-in, roles, 2FA and RADIUS work? | [`../authentication.md`](../authentication.md) | Flows, session/CSRF rules, permission mapping, RADIUS behavior and env settings. |
 | What is the multicast output configuration format? | [`../multicast-config-format.md`](../multicast-config-format.md) | Stations by source name + XMLTV id with DVB ids; on/off state not exported. |

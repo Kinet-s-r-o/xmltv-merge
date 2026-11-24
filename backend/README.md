@@ -2,11 +2,11 @@
 
 | Folder or file | What lives there | Read before changing |
 | --- | --- | --- |
-| `cmd/server/main.go` | Application startup, dependency wiring, scheduler start, middleware, routes and graceful shutdown. | `internal/config`, `internal/database`, `internal/handler`, `internal/service`. |
+| `cmd/server/main.go` | Application startup, dependency wiring, scheduler start, middleware, public vs. authenticated routes with their required permission, and graceful shutdown. | `internal/config`, `internal/database`, `internal/handler`, `internal/service`. |
 | `postgres.Dockerfile` | PostgreSQL 17 image with Alpine security updates and su-exec privilege switching. | Root `docker-compose.yml` and `../docs/map/OPERATIONS.md`; preserve the database major version. |
 | `internal/config/` | Environment-backed runtime configuration. | `config.go`; keep secret values out of docs. |
 | `internal/database/` | PostgreSQL pool setup and embedded ordered migrations. | `db.go` and the full migration sequence. |
-| `internal/database/migrations/` | Schema for sources, channels, programmes, retention, activation, outputs, feed tokens and multicast outputs (`008`: outputs, stations, EIT versions). | Add a new numbered migration; do not rewrite applied migrations. |
+| `internal/database/migrations/` | Schema for sources, channels, programmes, retention, activation, outputs, feed tokens, multicast outputs (`008`: outputs, stations, EIT versions) and authentication (`009`: roles, role_permissions, users, user_sessions, radius_servers; seeds the built-in Administrator role). Migrations re-run at every start, so they must stay idempotent. | Add a new numbered migration; do not rewrite applied migrations. |
 | `internal/models/` | JSON/database-facing Go structs for sources, channels, programmes and outputs. | `models.go` and frontend `src/api/client.ts`. |
 | `internal/parser/` | XMLTV decode and normalization into import records. | `xmltv.go`; preserve timezone, BOM and multilingual handling. |
 | `internal/repository/source_repo.go` | Source CRUD, due selection, activation, import status and transactional configuration import (never deletes). | Scheduler and import service when changing lifecycle behavior. |
@@ -25,10 +25,14 @@
 | `internal/service/multicast_streamer.go` | `MulticastManager`: one playout goroutine per enabled output, reconcile on config change, rebuild on import / p-f change / 60 s, pacing, continuity counters, backoff and live status. | `MULTICAST_*` env in `internal/config`. |
 | `internal/service/multicast_config.go` | Versioned XML multicast configuration export/parse/plan/apply. Tested in `multicast_config_test.go`. | `../docs/multicast-config-format.md`. |
 | `internal/handler/multicast.go` | `/api/v1/multicast-outputs` handlers (CRUD, activation, status, preview, `dump.ts`, export/import). | Route registration in `cmd/server/main.go`. |
+| `internal/auth/` | Dependency-free security primitives: PBKDF2 password hashing, TOTP (RFC 6238), AES-GCM `SecretBox`, permission model (sections x actions) and the RADIUS PAP client with Message-Authenticator. Tested in `auth_test.go` (RFC vectors, fake RADIUS server). | `../docs/authentication.md`. |
+| `internal/repository/auth_repo.go` | Users, roles + permissions, sessions (token hashes) and RADIUS servers. | Migration `009`. |
+| `internal/service/auth_service.go` | Sign-in (local/RADIUS), 2FA challenges and enrollment, lockout and per-address throttling, session lifetime, first-admin setup, and validated user/role/RADIUS administration with last-administrator and self-protection rules. | `../docs/authentication.md`. |
+| `internal/handler/auth.go` | `RequireAuth` (session cookie + CSRF header) and `Allow(action, sections...)` middleware; `/api/v1/auth/*`, `/users`, `/roles`, `/radius-servers` handlers. | Route to permission mapping in `cmd/server/main.go`. |
 | `internal/handler/handler.go` | HTTP handlers, JSON contracts, XMLTV feed serialization and source/output configuration export/import (`/api/v1/{sources,outputs}/export`, `/import/preview`, `/import`) via the shared `configImport` helper. | `cmd/server/main.go` route registration and frontend API client. |
 
 ## Checks
 
 Run `go test ./...` from `backend/`. Unit tests cover the source, output and multicast
 configuration XML parse/validation/plan (`internal/service`) and the DVB/EIT
-encoder (`internal/dvb`); other packages are compile-checked only.
+encoder (`internal/dvb`) and the auth primitives incl. RADIUS (`internal/auth`); other packages are compile-checked only.

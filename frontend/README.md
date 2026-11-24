@@ -4,9 +4,13 @@
 | --- | --- | --- |
 | `index.html` | HTML shell and pre-paint theme script (`data-theme` on `<html>`). | Theme storage key in `src/lib/theme.ts`. |
 | `src/main.tsx` | React root, IBM Plex font imports, TanStack Query client, Feedback provider and router. | Query defaults and global bootstrapping. |
-| `src/router.tsx` | Browser routes for dashboard, EPG, channels, programme detail, sources, outputs and multicast outputs. | Add a route here and update navigation if needed. |
-| `src/api/client.ts` | Fetch wrapper, TypeScript API models and all backend calls. | Keep JSON fields and empty-array handling aligned with Go. |
-| `src/components/layout/Layout.tsx` | Kinet app shell: grouped sidebar (collapsible rail, mobile drawer), topbar with API service pill and theme switch. | Global navigation and layout behavior. |
+| `src/router.tsx` | Browser routes for dashboard, EPG, channels, programme detail, sources, outputs, multicast outputs, System (users, roles, RADIUS servers) and My account; all wrapped in `AuthGate`, each section route in `RequirePermission`. | Add a route here, give it a section, and update navigation if needed. |
+| `src/components/auth/` | `AuthGate` (session query, sign-in page until signed in, clears cached data on sign-in/out and on 401), `LoginPage` (first-admin setup, credentials, TOTP code, TOTP enrollment), `RequirePermission`, `TotpQrCode`, `UserTypeIndicator`. | `../docs/authentication.md`. |
+| `src/lib/auth.tsx` | `SECTIONS` / `PERMISSION_ACTIONS` (mirror backend `auth.Sections`), `useAuth()` with `can(section, action)`. | Hide actions the role cannot perform; the backend enforces them anyway. |
+| `src/pages/system/` | `Users` (local/remote indicator, 2FA, lock), `Roles` (permission matrix), `RadiusServers` (CRUD, activation, test request). | `../design-system/xmltv-epg/pages/system.md`. |
+| `src/pages/Account.tsx` | Own profile, password change (local users), TOTP enrollment/disable and effective permissions. | `authApi` in `src/api/client.ts`. |
+| `src/api/client.ts` | `apiFetch` wrapper (same-origin cookie, `X-CSRF-Token` on unsafe methods, 401 fires `UNAUTHORIZED_EVENT`), TypeScript API models and all backend calls (`api`, `authApi`, `systemApi`). | Keep JSON fields and empty-array handling aligned with Go. |
+| `src/components/layout/Layout.tsx` | Kinet app shell: grouped sidebar filtered by Read permission (Monitor / Configure / System), collapsible rail, mobile drawer, topbar with API service pill, theme switch and user menu (My account, 2FA, Sign out). | Global navigation and layout behavior. |
 | `src/components/ui/` | Shared Kinet components: `Dialog`, `ConfirmDialog`, `Feedback` (notice stack, `useFeedback`), `PageHeader`, `ResourceState` (loading/empty/error), `Pagination`, `AppErrorBoundary`, `ImportPreviewDialog` (generic configuration import preview/confirm). | Dialog a11y contract and copy rules in the design master. |
 | `src/components/sources/SourceImportDialog.tsx` | Preview/confirm dialog for source configuration import (new / updated / unchanged, validation errors). | `../docs/source-config-format.md`. |
 | `src/lib/theme.ts`, `src/lib/sourceStatus.ts` | Theme preference (dark/light/system); source status labels, badges and timestamp formatting. | Keep status labels in sync across Dashboard and Sources. |

@@ -1,9 +1,29 @@
 const API_BASE = '/api/v1'
 
+/** Fired when the API answers 401 so the auth layer can show the sign-in page. */
+export const UNAUTHORIZED_EVENT = 'xmltv:unauthorized'
+
+let csrfToken = ''
+
+/** Stores the session's CSRF token; it is sent on every state-changing request. */
+export function setCsrfToken(token: string) {
+  csrfToken = token
+}
+
+/** fetch() for the API: same-origin cookies, CSRF header on unsafe methods, 401 broadcast. */
+async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const method = (options.method ?? 'GET').toUpperCase()
+  const headers = new Headers(options.headers)
+  if (method !== 'GET' && method !== 'HEAD' && csrfToken) headers.set('X-CSRF-Token', csrfToken)
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: 'same-origin' })
+  if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+  return res
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+  const res = await apiFetch(path, {
     ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers as Record<string, string> | undefined) },
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
@@ -161,7 +181,7 @@ export interface OutputImportPlan {
 function uploadConfig<P extends { items: unknown[] }>(path: string, file: File): Promise<P> {
   const formData = new FormData()
   formData.append('file', file)
-  return fetch(`${API_BASE}${path}`, { method: 'POST', body: formData }).then(async (res) => {
+  return apiFetch(path, { method: 'POST', body: formData }).then(async (res) => {
     if (!res.ok) throw await failure(res)
     const plan = (await res.json()) as P
     return { ...plan, items: plan.items ?? [] }
@@ -170,7 +190,7 @@ function uploadConfig<P extends { items: unknown[] }>(path: string, file: File):
 
 /** Downloads a configuration export; resolves to the file name and contents. */
 async function downloadConfig(path: string, fallbackName: string) {
-  const res = await fetch(`${API_BASE}${path}`)
+  const res = await apiFetch(path)
   if (!res.ok) throw await failure(res)
   const disposition = res.headers.get('Content-Disposition') ?? ''
   const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName
@@ -333,7 +353,7 @@ export const api = {
     const formData = new FormData()
     formData.append('file', file)
     if (sourceName) formData.append('source_name', sourceName)
-    return fetch(`${API_BASE}/import`, { method: 'POST', body: formData }).then(
+    return apiFetch('/import', { method: 'POST', body: formData }).then(
       async (res) => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: res.statusText }))
@@ -420,4 +440,167 @@ export const api = {
   },
 
   programme: (id: number) => request<Programme>(`/programmes/${id}`),
+}
+
+// ---- Authentication, users, roles and RADIUS servers ----------------------
+
+export type Section = 'dashboard' | 'epg' | 'channels' | 'sources' | 'outputs' | 'multicast' | 'users' | 'roles' | 'radius'
+export type PermissionAction = 'full' | 'read' | 'edit' | 'delete' | 'import' | 'export'
+
+export interface Permission {
+  full: boolean
+  read: boolean
+  edit: boolean
+  delete: boolean
+  import: boolean
+  export: boolean
+}
+
+export type Permissions = Partial<Record<Section, Permission>>
+
+export type AuthType = 'local' | 'remote'
+
+export interface User {
+  id: number
+  username: string
+  display_name: string
+  email: string
+  auth_type: AuthType
+  role_id: number
+  role_name: string
+  enabled: boolean
+  totp_required: boolean
+  totp_enabled: boolean
+  locked_until?: string
+  last_login_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface UserInput {
+  username: string
+  display_name: string
+  email: string
+  auth_type: AuthType
+  role_id: number
+  enabled: boolean
+  totp_required: boolean
+  /** Local users only; empty keeps the current password on update. */
+  password: string
+}
+
+export interface Role {
+  id: number
+  name: string
+  description: string
+  builtin: boolean
+  user_count: number
+  permissions: Permissions
+  created_at: string
+  updated_at: string
+}
+
+export interface RoleInput {
+  name: string
+  description: string
+  permissions: Permissions
+}
+
+export interface RadiusServer {
+  id: number
+  name: string
+  host: string
+  port: number
+  has_secret: boolean
+  timeout_seconds: number
+  retries: number
+  nas_identifier: string
+  priority: number
+  require_message_authenticator: boolean
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface RadiusServerInput {
+  name: string
+  host: string
+  port: number
+  /** Empty keeps the stored secret on update. */
+  secret: string
+  timeout_seconds: number
+  retries: number
+  nas_identifier: string
+  priority: number
+  require_message_authenticator: boolean
+  enabled: boolean
+}
+
+export interface RadiusTestResult {
+  accepted: boolean
+  reply_message?: string
+  error?: string
+  duration_ms: number
+}
+
+export interface Session {
+  user: User
+  permissions: Permissions
+  csrf_token: string
+}
+
+export type LoginResponse =
+  | ({ status: 'ok' } & Session)
+  | { status: 'totp_required'; challenge: string }
+  | { status: 'totp_setup_required'; challenge: string; totp_secret: string; totp_uri: string }
+
+export interface TOTPEnrollment {
+  totp_secret: string
+  totp_uri: string
+}
+
+export const authApi = {
+  status: () => request<{ setup_required: boolean }>('/auth/status'),
+  /** Current session, or null when not signed in. */
+  me: async (): Promise<Session | null> => {
+    const res = await apiFetch('/auth/me')
+    if (res.status === 401) return null
+    if (!res.ok) throw await failure(res)
+    return res.json() as Promise<Session>
+  },
+  setup: (input: { username: string; display_name: string; password: string }) =>
+    request<LoginResponse>('/auth/setup', { method: 'POST', body: JSON.stringify(input) }),
+  login: (username: string, password: string) =>
+    request<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  verify: (challenge: string, code: string) =>
+    request<LoginResponse>('/auth/login/verify', { method: 'POST', body: JSON.stringify({ challenge, code }) }),
+  logout: () => request<void>('/auth/logout', { method: 'POST' }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<void>('/auth/password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }),
+  beginTotp: () => request<TOTPEnrollment>('/auth/totp/setup', { method: 'POST' }),
+  enableTotp: (code: string) => request<void>('/auth/totp/enable', { method: 'POST', body: JSON.stringify({ code }) }),
+  disableTotp: (code: string) => request<void>('/auth/totp/disable', { method: 'POST', body: JSON.stringify({ code }) }),
+}
+
+export const systemApi = {
+  users: () => request<User[]>('/users'),
+  addUser: (user: UserInput) => request<{ id: number }>('/users', { method: 'POST', body: JSON.stringify(user) }),
+  updateUser: (id: number, user: UserInput) => request<void>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(user) }),
+  deleteUser: (id: number) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+  resetUserTotp: (id: number) => request<void>(`/users/${id}/reset-totp`, { method: 'POST' }),
+  unlockUser: (id: number) => request<void>(`/users/${id}/unlock`, { method: 'POST' }),
+
+  roles: () => request<Role[]>('/roles'),
+  addRole: (role: RoleInput) => request<{ id: number }>('/roles', { method: 'POST', body: JSON.stringify(role) }),
+  updateRole: (id: number, role: RoleInput) => request<void>(`/roles/${id}`, { method: 'PUT', body: JSON.stringify(role) }),
+  deleteRole: (id: number) => request<void>(`/roles/${id}`, { method: 'DELETE' }),
+
+  radiusServers: () => request<RadiusServer[]>('/radius-servers'),
+  addRadiusServer: (server: RadiusServerInput) => request<{ id: number }>('/radius-servers', { method: 'POST', body: JSON.stringify(server) }),
+  updateRadiusServer: (id: number, server: RadiusServerInput) => request<void>(`/radius-servers/${id}`, { method: 'PUT', body: JSON.stringify(server) }),
+  deleteRadiusServer: (id: number) => request<void>(`/radius-servers/${id}`, { method: 'DELETE' }),
+  setRadiusServerEnabled: (id: number, enabled: boolean) =>
+    request<void>(`/radius-servers/${id}/activation`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+  testRadiusServer: (id: number, username: string, password: string) =>
+    request<RadiusTestResult>(`/radius-servers/${id}/test`, { method: 'POST', body: JSON.stringify({ username, password }) }),
 }

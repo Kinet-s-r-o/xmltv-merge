@@ -108,13 +108,21 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
 
 - Shell: fixed 256px sidebar (≥1024px) with brand mark, grouped navigation
   ("Monitor": Dashboard, EPG grid, Channels; "Configure": Sources, Outputs,
-  Multicast outputs),
+  Multicast outputs; "System": Users, Roles, RADIUS servers), showing only
+  sections the signed-in role can read,
   footer meta and a persisted collapse toggle (64px icon rail). Below 1024px
   the sidebar is an off-canvas drawer with scrim; Escape closes it and returns
   focus to the menu button; a closed drawer is `visibility: hidden`.
 - Topbar: 58px sticky; mono kicker "XMLTV EPG" + section title; right side has
-  the API service pill (polls `/api/v1/health` every 30s, icon + text) and the
-  theme switch cycling dark → light → system.
+  the API service pill (polls `/api/v1/health` every 30s, icon + text), the
+  theme switch cycling dark → light → system and the user menu (initials
+  avatar + name; My account, Two-factor authentication, Sign out).
+- Sign-in: centered `.auth-panel` (400px, 480px for 2FA enrollment) on
+  `--bg-base`, brand mark header, one primary action per step. QR codes use
+  `.qr-code`, which stays dark-on-light in both themes for scanners.
+- Permissions: actions the role does not allow are hidden (switches are
+  disabled); a route without Read permission shows a "No access to ..."
+  empty state, and the dashboard redirects to the first allowed section.
 - Content: `.content-area`, max-width 1680px, padding 16/12 → 20/18 → 24/24,
   16px gap between page blocks. Route changes move focus to `<main>`.
 - Page composition: `PageHeader` → optional `.ops-register` → `.data-panel`
@@ -235,7 +243,7 @@ The validator's "data table without data-table" check matches the SolidJS
 - System-wide visual changes update this file and `frontend/src/index.css` in
   the same change; never introduce a second token system.
 - Page-specific exceptions go in `pages/<route>.md` (current: `epg.md`,
-  `outputs.md`).
+  `outputs.md`, `channels.md`, `multicast.md`, `system.md`).
 - After UI changes check both themes, 375 / 768 / 1024 / 1440px, keyboard
   focus, empty database (API collections are `[]`), loading and error states,
   and reduced motion.

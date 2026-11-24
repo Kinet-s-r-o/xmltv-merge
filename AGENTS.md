@@ -27,6 +27,11 @@ provides a React web UI plus configurable public XMLTV feeds.
   new numbered migration for schema changes; do not rewrite applied history.
 - Keep source lifecycle changes end to end: persistence, API, scheduler/manual
   refresh behavior, and UI must agree.
+- Every `/api/v1` route except health and `/auth/{status,setup,login,login/verify,logout}`
+  needs a session and an explicit `Allow(action, sections...)` permission in
+  `backend/cmd/server/main.go`; new sections must be added in Go, the `009`
+  seed (or a new migration granting it to the Administrator role) and
+  `frontend/src/lib/auth.tsx` together. See `docs/authentication.md`.
 - Keep public feed URLs token-protected. Do not expose real tokens, credentials,
   private hosts, or environment values in documentation or logs.
 - Empty API collections must serialize as `[]`, not `null`; preserve the

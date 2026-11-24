@@ -470,6 +470,51 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
   .url-field { display: flex; gap: 8px; min-width: 0; }
   .url-field .input { font-family: "IBM Plex Mono", "Cascadia Code", Consolas, monospace; font-size: 11px; }
+
+  /* ============================================================
+   * 18b. Authentication and system administration
+   * ============================================================ */
+  .auth-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: rgb(var(--bg-base)); }
+  .auth-panel { width: min(100%, 400px); background: rgb(var(--bg-surface)); border: 1px solid rgb(var(--border-default)); }
+  .auth-panel.is-wide { width: min(100%, 480px); }
+  .auth-panel-header { display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid rgb(var(--border-subtle)); }
+  .auth-panel-header h1 { margin: 0; font-size: 16px; font-weight: 620; letter-spacing: -.01em; }
+  .auth-panel-header p { margin: 2px 0 0; color: rgb(var(--text-muted)); font-size: 11px; }
+  .auth-panel-body { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 20px; }
+  .auth-panel-body > p { margin: 0; color: rgb(var(--text-secondary)); font-size: 12px; line-height: 1.5; }
+  .auth-panel-footer { padding: 10px 20px; border-top: 1px solid rgb(var(--border-subtle)); color: rgb(var(--text-muted)); font-size: 10px; }
+  .code-input { font-family: "IBM Plex Mono", "Cascadia Code", Consolas, monospace; font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: .35em; text-align: center; }
+  /* QR codes stay dark-on-light in both themes: many authenticator scanners cannot read inverted codes. */
+  .qr-code { display: block; width: 184px; height: 184px; margin: 0 auto; padding: 8px; background: rgb(255 255 255); border: 1px solid rgb(var(--border-default)); border-radius: var(--radius-control); }
+  .qr-code path { fill: rgb(0 0 0); }
+  .secret-text { display: block; padding: 8px 10px; color: rgb(var(--text-primary)); background: rgb(var(--bg-base) / .45); border: 1px solid rgb(var(--border-subtle)); border-radius: var(--radius-control); font-family: "IBM Plex Mono", "Cascadia Code", Consolas, monospace; font-size: 12px; letter-spacing: .08em; word-break: break-all; user-select: all; }
+  /* User type indicator: local = green, remote = orange; always paired with its text label. */
+  .type-indicator { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .type-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 999px; }
+  .type-dot.is-local { background: rgb(var(--success)); box-shadow: 0 0 0 2px rgb(var(--success) / .2); }
+  .type-dot.is-remote { background: rgb(var(--warning-strong)); box-shadow: 0 0 0 2px rgb(var(--warning-strong) / .2); }
+  .permission-matrix th, .permission-matrix td { text-align: center; }
+  .permission-matrix th:first-child, .permission-matrix td:first-child { text-align: left; }
+  .permission-matrix .checkbox { width: 16px; height: 16px; }
+  .radio-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .radio-card { display: flex; align-items: flex-start; gap: 9px; padding: 10px 11px; color: rgb(var(--text-secondary)); background: rgb(var(--bg-base) / .3); border: 1px solid rgb(var(--border-default)); border-radius: var(--radius-control); font-size: 12px; font-weight: 400; cursor: pointer; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+  .radio-card:has(input:checked) { background: rgb(var(--accent) / .08); border-color: rgb(var(--accent) / .55); }
+  .radio-card:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+  .radio-card input { margin-top: 2px; accent-color: rgb(var(--accent)); }
+  .radio-card strong { display: flex; align-items: center; gap: 7px; color: rgb(var(--text-primary)); font-weight: 600; }
+  .radio-card small { display: block; margin-top: 3px; color: rgb(var(--text-muted)); font-size: 10px; line-height: 1.4; }
+  .user-menu { position: relative; }
+  .user-menu-button { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; max-width: 220px; padding: 3px 10px 3px 4px; color: rgb(var(--text-secondary)); background: transparent; border: 1px solid rgb(var(--border-subtle)); border-radius: var(--radius-control); font-size: 12px; font-weight: 600; }
+  .user-menu-button:hover { color: rgb(var(--text-primary)); background: rgb(var(--bg-elevated)); border-color: rgb(var(--border-default)); }
+  .user-avatar { width: 24px; height: 24px; display: inline-grid; place-items: center; flex: 0 0 auto; color: rgb(var(--accent-hover)); background: rgb(var(--accent) / .12); border: 1px solid rgb(var(--accent) / .3); border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .user-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .user-menu-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 35; width: 240px; padding: 6px; background: rgb(var(--bg-surface)); border: 1px solid rgb(var(--border-default)); border-radius: var(--radius-control); box-shadow: 0 12px 28px rgb(var(--shadow-color) / .28); }
+  .user-menu-meta { padding: 8px 10px 10px; border-bottom: 1px solid rgb(var(--border-subtle)); margin-bottom: 6px; }
+  .user-menu-meta strong { display: block; color: rgb(var(--text-primary)); font-size: 12px; overflow-wrap: anywhere; }
+  .user-menu-meta span { display: block; margin-top: 2px; color: rgb(var(--text-muted)); font-size: 10px; }
+  .user-menu-item { width: 100%; display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 6px 10px; color: rgb(var(--text-secondary)); background: transparent; border: 0; border-radius: var(--radius-control); font-size: 12px; text-align: left; text-decoration: none; }
+  .user-menu-item:hover { color: rgb(var(--text-primary)); background: rgb(var(--bg-elevated)); }
+  .user-menu-item.is-danger { color: rgb(var(--error-text)); }
 }
 
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }

@@ -1,31 +1,41 @@
 import { Outlet, NavLink, useLocation, matchPath } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, Database, Layers3, LayoutDashboard, ListVideo, Menu, Monitor, Moon, PanelLeftClose, PanelLeftOpen, RadioTower, Sun, Tv, Wifi, WifiOff, X, type LucideIcon } from 'lucide-react'
+import { ChevronRight, Database, KeyRound, Layers3, LayoutDashboard, ListVideo, LogOut, Menu, Monitor, Moon, PanelLeftClose, PanelLeftOpen, RadioTower, Server, ShieldCheck, Sun, Tv, UserCog, Users, Wifi, WifiOff, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../../api/client'
+import { api, type Section } from '../../api/client'
+import { useAuth } from '../../lib/auth'
 import { applyTheme, nextTheme, readThemePreference, type ThemePreference } from '../../lib/theme'
 
 interface NavItem {
   to: string
   icon: LucideIcon
   label: string
+  section: Section
 }
 
 const navGroups: Array<{ label: string; items: NavItem[] }> = [
   {
     label: 'Monitor',
     items: [
-      { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/epg', icon: Tv, label: 'EPG grid' },
-      { to: '/channels', icon: ListVideo, label: 'Channels' },
+      { to: '/', icon: LayoutDashboard, label: 'Dashboard', section: 'dashboard' },
+      { to: '/epg', icon: Tv, label: 'EPG grid', section: 'epg' },
+      { to: '/channels', icon: ListVideo, label: 'Channels', section: 'channels' },
     ],
   },
   {
     label: 'Configure',
     items: [
-      { to: '/sources', icon: Database, label: 'Sources' },
-      { to: '/outputs', icon: Layers3, label: 'Outputs' },
-      { to: '/multicast', icon: RadioTower, label: 'Multicast outputs' },
+      { to: '/sources', icon: Database, label: 'Sources', section: 'sources' },
+      { to: '/outputs', icon: Layers3, label: 'Outputs', section: 'outputs' },
+      { to: '/multicast', icon: RadioTower, label: 'Multicast outputs', section: 'multicast' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { to: '/system/users', icon: Users, label: 'Users', section: 'users' },
+      { to: '/system/roles', icon: ShieldCheck, label: 'Roles', section: 'roles' },
+      { to: '/system/radius', icon: Server, label: 'RADIUS servers', section: 'radius' },
     ],
   },
 ]
@@ -38,6 +48,10 @@ const sectionTitles: Array<[string, string]> = [
   ['/sources', 'Sources'],
   ['/outputs', 'Outputs'],
   ['/multicast', 'Multicast outputs'],
+  ['/system/users', 'Users'],
+  ['/system/roles', 'Roles'],
+  ['/system/radius', 'RADIUS servers'],
+  ['/account', 'My account'],
 ]
 
 const themeMeta: Record<ThemePreference, { icon: LucideIcon; label: string }> = {
@@ -63,6 +77,10 @@ export function Layout() {
   const [theme, setTheme] = useState<ThemePreference>(readThemePreference)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const { can } = useAuth()
+  const visibleGroups = navGroups
+    .map((group) => ({ ...group, items: group.items.filter((item) => can(item.section)) }))
+    .filter((group) => group.items.length > 0)
 
   const { isError: serviceDown, isSuccess: serviceUp } = useQuery({
     queryKey: ['health'],
@@ -127,7 +145,7 @@ export function Layout() {
           </button>
         </div>
         <nav className="sidebar-nav" aria-label="Sections">
-          {navGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label} className="nav-group">
               <p className="nav-section">{group.label}</p>
               <ul className="nav-list">
@@ -203,12 +221,92 @@ export function Layout() {
             >
               <ThemeIcon className="h-4 w-4" aria-hidden="true" />
             </button>
+            <UserMenu />
           </div>
         </header>
         <main ref={mainRef} id="main-content" tabIndex={-1} className="content-area">
           <Outlet />
         </main>
       </div>
+    </div>
+  )
+}
+
+/** Topbar account menu: signed-in user, role, My account and Sign out. */
+function UserMenu() {
+  const { session, signOut } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const location = useLocation()
+  const { user } = session
+  const name = user.display_name || user.username
+  const initials = name.split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('') || '?'
+
+  useEffect(() => setOpen(false), [location.pathname])
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        buttonRef.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div className="user-menu" ref={rootRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="user-menu-button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        title={`Signed in as ${user.username}`}
+      >
+        <span className="user-avatar" aria-hidden="true">{initials}</span>
+        <span className="user-menu-name max-sm:sr-only">{name}</span>
+      </button>
+      {open && (
+        <div className="user-menu-panel" role="menu" aria-label="Account">
+          <div className="user-menu-meta">
+            <strong>{name}</strong>
+            <span className="font-mono">{user.username} · {user.auth_type === 'local' ? 'Local' : 'Remote (RADIUS)'}</span>
+            <span>Role: {user.role_name}</span>
+          </div>
+          <NavLink to="/account" role="menuitem" className="user-menu-item">
+            <UserCog className="h-4 w-4" aria-hidden="true" /> My account
+          </NavLink>
+          <NavLink to="/account#two-factor" role="menuitem" className="user-menu-item">
+            <KeyRound className="h-4 w-4" aria-hidden="true" /> Two-factor authentication
+          </NavLink>
+          <button
+            type="button"
+            role="menuitem"
+            className="user-menu-item is-danger"
+            disabled={signingOut}
+            onClick={() => {
+              setSigningOut(true)
+              void signOut().finally(() => setSigningOut(false))
+            }}
+          >
+            {signingOut ? <span className="spinner spinner-sm" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
