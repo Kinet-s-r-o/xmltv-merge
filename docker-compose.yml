@@ -41,6 +41,13 @@ services:
       # Outgoing interface by its macvlan address (robust against eth0/eth1
       # ordering inside the container).
       MULTICAST_INTERFACE: ${MULTICAST_INTERFACE:-${MULTICAST_IPV4:-172.31.254.10}}
+      # Network settings of "catv", repeated here (unused by the backend) so
+      # deployment tools that only scan service environments (Coolify) list
+      # them as variables.
+      MULTICAST_PARENT_IF: ${MULTICAST_PARENT_IF:-}
+      MULTICAST_SUBNET: ${MULTICAST_SUBNET:-172.31.254.0/24}
+      MULTICAST_GATEWAY: ${MULTICAST_GATEWAY:-172.31.254.1}
+      MULTICAST_IPV4: ${MULTICAST_IPV4:-172.31.254.10}
     networks:
       default:
       catv:
