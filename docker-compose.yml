@@ -36,6 +36,15 @@ services:
       AUTH_SESSION_MAX_HOURS: ${AUTH_SESSION_MAX_HOURS:-168}
       AUTH_LOCKOUT_THRESHOLD: ${AUTH_LOCKOUT_THRESHOLD:-5}
       AUTH_LOCKOUT_MINUTES: ${AUTH_LOCKOUT_MINUTES:-15}
+      # DVB EIT multicast streaming (off by default, see network "catv").
+      MULTICAST_ENABLED: ${MULTICAST_ENABLED:-false}
+      # Outgoing interface by its macvlan address (robust against eth0/eth1
+      # ordering inside the container).
+      MULTICAST_INTERFACE: ${MULTICAST_INTERFACE:-${MULTICAST_IPV4:-172.31.254.10}}
+    networks:
+      default:
+      catv:
+        ipv4_address: ${MULTICAST_IPV4:-172.31.254.10}
     expose:
       - "${BACKEND_PORT:-8080}"
     healthcheck:
@@ -67,3 +76,18 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  # Macvlan network for DVB EIT multicast towards the DVB-C modulator. The
+  # bridge network never forwards multicast to the LAN. Set
+  # MULTICAST_PARENT_IF to the host NIC (or VLAN sub-interface) in the
+  # headend network; left empty, Docker backs it with an internal dummy
+  # interface, so nothing leaves the host.
+  catv:
+    driver: macvlan
+    driver_opts:
+      parent: ${MULTICAST_PARENT_IF:-}
+    ipam:
+      config:
+        - subnet: ${MULTICAST_SUBNET:-172.31.254.0/24}
+          gateway: ${MULTICAST_GATEWAY:-172.31.254.1}

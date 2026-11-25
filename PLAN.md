@@ -234,8 +234,9 @@ Replaces the former cherryEPG/Perl chain (import script + SQLite carousel +
   optional TDT/TOT every 5 s on PID 0x14. Rebuild after imports (5 s
   debounce), at the next p/f change and every 60 s; errors back off 5–60 s.
 - **Deployment**: streaming is off unless `MULTICAST_ENABLED=true`;
-  `docker-compose.multicast.yml` adds a macvlan interface on the headend
-  network. Times in the DB are UTC; the output timezone only drives the TOT
+  `docker-compose.yml` attaches the backend to the macvlan network `catv`
+  on the headend network (`MULTICAST_PARENT_IF`; an internal dummy when
+  unset). Times in the DB are UTC; the output timezone only drives the TOT
   local time offset.
 
 ## Risks & Notes
