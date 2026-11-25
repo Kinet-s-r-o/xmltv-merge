@@ -2,7 +2,7 @@
 -- import, with the stage reached, counts and the reasons data was not imported.
 CREATE TABLE IF NOT EXISTS source_import_log (
     id BIGSERIAL PRIMARY KEY,
-    -- Kept when the source is deleted; source_name preserves the label.
+    -- Kept when the source is deleted, source_name preserves the label.
     source_id INT REFERENCES sources(id) ON DELETE SET NULL,
     source_name TEXT NOT NULL,
     trigger TEXT NOT NULL,              -- manual | scheduled | upload
