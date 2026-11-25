@@ -49,6 +49,8 @@ export interface Source {
   updated_at: string
   channel_count: number
   programme_count: number
+  /** True while a manual or scheduled import of this source is running or queued. */
+  refreshing?: boolean
 }
 
 export interface Channel {
@@ -384,6 +386,7 @@ export const api = {
 
   deleteSource: (id: number) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
 
+  /** Queues a background import (202); the outcome appears in the source status. */
   refreshSource: (id: number) => request<{ status: string }>(`/sources/${id}/refresh`, { method: 'POST' }),
 
   setSourceEnabled: (id: number, enabled: boolean) =>

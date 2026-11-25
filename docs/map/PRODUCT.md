@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | Understand the current architecture and planned scope | [`../../PLAN.md`](../../PLAN.md) | Original architecture, schema, API and implementation record; validate against code. |
 | Add or change XMLTV parsing | [`../../backend/internal/parser/xmltv.go`](../../backend/internal/parser/xmltv.go) | XMLTV structures, BOM-safe decode, date/time parsing and parsed result model. |
-| Change file/URL import behavior | [`../../backend/internal/service/import_service.go`](../../backend/internal/service/import_service.go) | Validates HTTP(S) sources, size limit, source status and current/future replacement. |
+| Change file/URL import behavior | [`../../backend/internal/service/import_service.go`](../../backend/internal/service/import_service.go) | Validates HTTP(S) sources, size limit, source status and current/future replacement. Manual refresh is queued in the background; sources expose `refreshing` while an import runs. |
 | Change source persistence or source statistics | [`../../backend/internal/repository/source_repo.go`](../../backend/internal/repository/source_repo.go) | Source CRUD, due selection, import status and activation persistence. |
 | Change scheduled refresh or retention | [`../../backend/internal/service/scheduler.go`](../../backend/internal/service/scheduler.go) | Minute-level due imports and hourly history cleanup. |
 | Change channels or programme queries | [`../../backend/internal/repository/channel_repo.go`](../../backend/internal/repository/channel_repo.go), [`../../backend/internal/repository/programme_repo.go`](../../backend/internal/repository/programme_repo.go) | Filters, pagination, programme details and retention queries. |

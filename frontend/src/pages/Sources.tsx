@@ -42,7 +42,8 @@ const SOURCE_COLUMNS: TableColumn<Source>[] = [
     cell: (source) => (
       <>
         <span className={healthBadge[sourceHealth(source)]}>{healthLabel[sourceHealth(source)]}</span>
-        {source.last_import_error && <span className="cell-sub text-error-text max-w-[320px]">{source.last_import_error}</span>}
+        {source.refreshing && <span className="cell-sub font-mono">Refreshing…</span>}
+        {!source.refreshing && source.last_import_error && <span className="cell-sub text-error-text max-w-[320px]">{source.last_import_error}</span>}
       </>
     ),
   },
@@ -147,7 +148,8 @@ export function Sources() {
   const { data, isLoading, isError, error: sourcesError, refetch } = useQuery({
     queryKey: ['sources'],
     queryFn: () => api.sources(),
-    refetchInterval: 30_000,
+    // Poll faster while background imports run so their result shows promptly.
+    refetchInterval: (query) => (query.state.data?.some((source) => source.refreshing) ? 5_000 : 30_000),
   })
   const sources = data ?? []
   const editingSource = sources.find((source) => source.id === editingId)
@@ -214,11 +216,34 @@ export function Sources() {
     onError: (err: Error, source) => notify({ tone: 'error', title: `Could not delete ${source.name}`, message: err.message }),
   })
 
+  // Announce manual background imports that finished since the previous poll;
+  // scheduled imports only refresh the guide data without a notice.
+  const refreshingIds = useRef<Set<number>>(new Set())
+  const requestedIds = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    if (!data) return
+    const finished = data.filter((source) => !source.refreshing && refreshingIds.current.has(source.id))
+    refreshingIds.current = new Set(data.filter((source) => source.refreshing).map((source) => source.id))
+    if (finished.length === 0) return
+    queryClient.invalidateQueries({ queryKey: ['channels'] })
+    queryClient.invalidateQueries({ queryKey: ['programmes'] })
+    for (const source of finished) {
+      if (!requestedIds.current.delete(source.id)) continue
+      if (source.last_import_status === 'error') {
+        notify({ tone: 'error', title: `Import of ${source.name} failed`, message: source.last_import_error || 'See the source status for details.' })
+      } else {
+        notify({ tone: 'success', title: `${source.name} imported`, message: 'Channels and programmes are up to date in the EPG grid.' })
+      }
+    }
+  }, [data, notify, queryClient])
+
   const refreshMutation = useMutation({
     mutationFn: (source: Source) => api.refreshSource(source.id),
     onSuccess: (_, source) => {
-      notify({ tone: 'info', title: 'Refresh started', message: `${source.name} is downloading and importing its XMLTV feed.` })
-      invalidateGuideData()
+      refreshingIds.current.add(source.id)
+      requestedIds.current.add(source.id)
+      notify({ tone: 'info', title: 'Refresh started', message: `${source.name} is downloading and importing its XMLTV feed in the background.` })
+      queryClient.invalidateQueries({ queryKey: ['sources'] })
     },
     onError: (err: Error, source) => notify({ tone: 'error', title: `Could not refresh ${source.name}`, message: err.message }),
   })
@@ -297,6 +322,7 @@ export function Sources() {
       setBulkRun({ kind, total: targets.length, done, current: source.name, stopping: false })
       try {
         await action(source)
+        if (kind === 'refresh') refreshingIds.current.add(source.id)
       } catch (err) {
         failed.push({ source, message: err instanceof Error ? err.message : String(err) })
       }
@@ -329,16 +355,16 @@ export function Sources() {
     const targets = selectedRefreshable
     const skipped = selectedSources.length - targets.length
     const { done, failed, stopped } = await runBulk('refresh', targets, (source) => api.refreshSource(source.id))
-    const imported = done - failed.length
+    const queued = done - failed.length
     notify({
-      tone: failed.length > 0 ? 'error' : 'success',
-      title: failed.length > 0 ? `${plural(failed.length, 'source')} failed to import` : `${plural(imported, 'source')} downloaded and imported`,
+      tone: failed.length > 0 ? 'error' : 'info',
+      title: failed.length > 0 ? `${plural(failed.length, 'source')} could not be refreshed` : `${plural(queued, 'source')} queued for refresh`,
       message: [
-        imported > 0 && failed.length > 0 ? `${plural(imported, 'source')} imported.` : '',
+        queued > 0 && failed.length > 0 ? `${plural(queued, 'source')} queued.` : '',
         failed.length > 0 ? `Failed: ${failed.map(({ source, message }) => `${source.name} (${message})`).join('; ')}.` : '',
         skipped > 0 ? `${plural(skipped, 'disabled source')} skipped.` : '',
         stopped ? `Stopped; ${plural(targets.length - done, 'source')} were not refreshed.` : '',
-      ].filter(Boolean).join(' ') || 'Channels and programmes are up to date in the EPG grid.',
+      ].filter(Boolean).join(' ') || 'Imports run in the background; each source status updates when it finishes.',
     })
   }
 
@@ -566,7 +592,7 @@ export function Sources() {
             {bulkRun ? (
               <p className="bulk-bar-status" role="status" aria-live="polite">
                 <span className="spinner spinner-sm" aria-hidden="true" />
-                {bulkRun.kind === 'delete' ? 'Deleting' : 'Downloading and importing'} {bulkRun.done + 1} of {bulkRun.total}: <strong>{bulkRun.current}</strong>
+                {bulkRun.kind === 'delete' ? 'Deleting' : 'Queueing refresh'} {bulkRun.done + 1} of {bulkRun.total}: <strong>{bulkRun.current}</strong>
                 {bulkRun.stopping && <span className="text-muted"> · stopping after this source</span>}
               </p>
             ) : (
@@ -666,7 +692,7 @@ export function Sources() {
               </thead>
               <tbody>
                 {visibleSources.map((source) => {
-                  const refreshing = refreshMutation.isPending && refreshMutation.variables?.id === source.id
+                  const refreshing = Boolean(source.refreshing) || (refreshMutation.isPending && refreshMutation.variables?.id === source.id)
                   return (
                     <tr key={source.id} className={selection.isSelected(source.id) ? 'is-selected' : undefined}>
                       <td className="cell-select">

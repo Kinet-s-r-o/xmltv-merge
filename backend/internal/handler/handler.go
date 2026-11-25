@@ -2,9 +2,9 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -65,6 +65,9 @@ func (h *Handler) ListSources(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	for i := range sources {
+		sources[i].Refreshing = h.importSvc.IsRefreshing(sources[i].ID)
 	}
 	writeJSON(w, http.StatusOK, sources)
 }
@@ -373,22 +376,22 @@ func (h *Handler) RefreshSource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source id"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
-	defer cancel()
-	found, err := h.importSvc.RefreshSource(ctx, id)
+	found, err := h.importSvc.StartRefresh(r.Context(), id)
 	if err != nil {
-		if err == service.ErrSourceDisabled {
+		switch {
+		case errors.Is(err, service.ErrSourceDisabled), errors.Is(err, service.ErrRefreshInProgress):
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-			return
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "source not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
+	// The import runs in the background; its result lands in the source status.
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 }
 
 func (h *Handler) SetSourceEnabled(w http.ResponseWriter, r *http.Request) {

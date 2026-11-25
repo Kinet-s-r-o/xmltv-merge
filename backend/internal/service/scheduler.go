@@ -63,9 +63,10 @@ func (s *Scheduler) runDue(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		importCtx, cancel := context.WithTimeout(ctx, 6*time.Minute)
-		err := s.imports.ImportURL(importCtx, source)
-		cancel()
+		skipped, err := s.imports.ImportScheduled(ctx, source)
+		if skipped {
+			continue
+		}
 		if err != nil {
 			log.Printf("scheduler: import source %q: %v", source.Name, err)
 		} else {

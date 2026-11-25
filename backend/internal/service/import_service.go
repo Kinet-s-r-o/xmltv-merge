@@ -3,11 +3,14 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,9 +27,27 @@ type ImportService struct {
 	progRepo    *repository.ProgrammeRepository
 	// OnImported is called after a source import finished successfully.
 	OnImported func(sourceID int)
+
+	// refreshMu guards refreshing: the URL sources with a manual or scheduled
+	// import in flight, so one source never imports twice at the same time.
+	refreshMu  sync.Mutex
+	refreshing map[int]bool
+	// importSlots caps how many URL imports run concurrently.
+	importSlots chan struct{}
 }
 
 var ErrSourceDisabled = fmt.Errorf("source is disabled")
+
+// ErrRefreshInProgress is returned when a source already has an import running or queued.
+var ErrRefreshInProgress = errors.New("source refresh is already running")
+
+// sourceImportTimeout bounds one URL import (download, parse and store),
+// counted from when it gets an import slot.
+const sourceImportTimeout = 6 * time.Minute
+
+// maxConcurrentImports limits parallel URL imports so bulk refreshes do not
+// overload PostgreSQL or the upstream servers.
+const maxConcurrentImports = 2
 
 var sourceHTTPClient = &http.Client{Timeout: 5 * time.Minute}
 
@@ -70,6 +91,8 @@ func NewImportService(db *pgxpool.Pool) *ImportService {
 		sourceRepo:  repository.NewSourceRepository(db),
 		channelRepo: repository.NewChannelRepository(db),
 		progRepo:    repository.NewProgrammeRepository(db),
+		refreshing:  make(map[int]bool),
+		importSlots: make(chan struct{}, maxConcurrentImports),
 	}
 }
 
@@ -111,7 +134,10 @@ func (s *ImportService) UpdateURLSource(ctx context.Context, id int, name, sourc
 	return s.sourceRepo.UpdateURL(ctx, id, name, sourceURL, intervalMinutes, historyDays)
 }
 
-func (s *ImportService) RefreshSource(ctx context.Context, id int) (bool, error) {
+// StartRefresh queues a background import of a URL source and returns at once.
+// The outcome is recorded in the source's last import status. It reports
+// false when the source does not exist.
+func (s *ImportService) StartRefresh(ctx context.Context, id int) (bool, error) {
 	source, err := s.sourceRepo.GetByID(ctx, id)
 	if err != nil {
 		return false, err
@@ -122,10 +148,65 @@ func (s *ImportService) RefreshSource(ctx context.Context, id int) (bool, error)
 	if !source.Enabled {
 		return true, ErrSourceDisabled
 	}
-	if err := s.ImportURL(ctx, *source); err != nil {
-		return true, err
+	if !s.beginRefresh(source.ID) {
+		return true, ErrRefreshInProgress
 	}
+	go func() {
+		defer s.endRefresh(source.ID)
+		// Detached from the HTTP request: the import must outlive the response.
+		if err := s.runImport(context.Background(), *source); err != nil {
+			log.Printf("refresh: import source %q: %v", source.Name, err)
+		} else {
+			log.Printf("refresh: imported source %q", source.Name)
+		}
+	}()
 	return true, nil
+}
+
+// ImportScheduled imports a due source unless it is already being refreshed,
+// in which case it reports skipped.
+func (s *ImportService) ImportScheduled(ctx context.Context, source models.Source) (skipped bool, err error) {
+	if !s.beginRefresh(source.ID) {
+		return true, nil
+	}
+	defer s.endRefresh(source.ID)
+	return false, s.runImport(ctx, source)
+}
+
+// IsRefreshing reports whether the source has an import running or queued.
+func (s *ImportService) IsRefreshing(id int) bool {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+	return s.refreshing[id]
+}
+
+func (s *ImportService) beginRefresh(id int) bool {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+	if s.refreshing[id] {
+		return false
+	}
+	s.refreshing[id] = true
+	return true
+}
+
+func (s *ImportService) endRefresh(id int) {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+	delete(s.refreshing, id)
+}
+
+// runImport waits for an import slot, then imports the source within sourceImportTimeout.
+func (s *ImportService) runImport(ctx context.Context, source models.Source) error {
+	select {
+	case s.importSlots <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-s.importSlots }()
+	importCtx, cancel := context.WithTimeout(ctx, sourceImportTimeout)
+	defer cancel()
+	return s.ImportURL(importCtx, source)
 }
 
 type ImportResult struct {

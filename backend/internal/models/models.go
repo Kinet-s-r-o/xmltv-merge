@@ -18,6 +18,8 @@ type Source struct {
 	UpdatedAt              time.Time  `json:"updated_at"`
 	ChannelCount           int        `json:"channel_count"`
 	ProgrammeCount         int        `json:"programme_count"`
+	// Refreshing is true while an import of the source is running or queued.
+	Refreshing bool `json:"refreshing"`
 }
 
 type Channel struct {
