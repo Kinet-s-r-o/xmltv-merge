@@ -166,3 +166,29 @@ type MulticastStatus struct {
 	TruncatedEvents     int        `json:"truncated_events"`
 	ServicesWithoutData []string   `json:"services_without_data"`
 }
+
+// SourceImportLog is one audited import attempt of a source.
+type SourceImportLog struct {
+	ID                       int64      `json:"id"`
+	SourceID                 *int       `json:"source_id,omitempty"`
+	SourceName               string     `json:"source_name"`
+	Trigger                  string     `json:"trigger"`
+	TriggeredBy              string     `json:"triggered_by,omitempty"`
+	StartedAt                time.Time  `json:"started_at"`
+	FinishedAt               *time.Time `json:"finished_at,omitempty"`
+	Status                   string     `json:"status"`
+	Stage                    string     `json:"stage"`
+	Error                    string     `json:"error,omitempty"`
+	Bytes                    int64      `json:"bytes"`
+	ChannelsTotal            int        `json:"channels_total"`
+	ChannelsImported         int        `json:"channels_imported"`
+	ProgrammesTotal          int        `json:"programmes_total"`
+	ProgrammesImported       int        `json:"programmes_imported"`
+	ProgrammesPast           int        `json:"programmes_past"`
+	ProgrammesInvalid        int        `json:"programmes_invalid"`
+	ProgrammesUnknownChannel int        `json:"programmes_unknown_channel"`
+	ProgrammesFailed         int        `json:"programmes_failed"`
+	DetailErrors             int        `json:"detail_errors"`
+	IssueCount               int        `json:"issue_count"`
+	Issues                   []string   `json:"issues"`
+}

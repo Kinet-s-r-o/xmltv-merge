@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Database, Download, Link2, Pencil, Plus, RefreshCw, Save, Search, Square, Trash2, Upload, X } from 'lucide-react'
+import { Database, Download, History, Link2, Pencil, Plus, RefreshCw, Save, Search, Square, Trash2, Upload, X } from 'lucide-react'
 import { api, CreateSourceInput, Source } from '../api/client'
 import { SourceImportDialog } from '../components/sources/SourceImportDialog'
+import { SourceImportLogDialog } from '../components/sources/SourceImportLogDialog'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Dialog } from '../components/ui/Dialog'
 import { useFeedback } from '../components/ui/Feedback'
@@ -43,7 +44,7 @@ const SOURCE_COLUMNS: TableColumn<Source>[] = [
       <>
         <span className={healthBadge[sourceHealth(source)]}>{healthLabel[sourceHealth(source)]}</span>
         {source.refreshing && <span className="cell-sub font-mono">Refreshing…</span>}
-        {!source.refreshing && source.last_import_error && <span className="cell-sub text-error-text max-w-[320px]">{source.last_import_error}</span>}
+        {!source.refreshing && source.last_import_error && <span className={`cell-sub max-w-[320px] ${source.last_import_status === 'success' ? 'text-warning-text' : 'text-error-text'}`}>{source.last_import_error}</span>}
       </>
     ),
   },
@@ -143,6 +144,7 @@ export function Sources() {
   const [deleteTarget, setDeleteTarget] = useState<Source | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkRun, setBulkRun] = useState<BulkRun | null>(null)
+  const [logSource, setLogSource] = useState<Source | null>(null)
   const bulkStopRef = useRef(false)
 
   const { data, isLoading, isError, error: sourcesError, refetch } = useQuery({
@@ -227,12 +229,15 @@ export function Sources() {
     if (finished.length === 0) return
     queryClient.invalidateQueries({ queryKey: ['channels'] })
     queryClient.invalidateQueries({ queryKey: ['programmes'] })
+    queryClient.invalidateQueries({ queryKey: ['source-imports'] })
     for (const source of finished) {
       if (!requestedIds.current.delete(source.id)) continue
       if (source.last_import_status === 'error') {
         notify({ tone: 'error', title: `Import of ${source.name} failed`, message: source.last_import_error || 'See the source status for details.' })
       } else {
-        notify({ tone: 'success', title: `${source.name} imported`, message: 'Channels and programmes are up to date in the EPG grid.' })
+        notify(source.last_import_error
+          ? { tone: 'info', title: `${source.name} imported with problems`, message: `${source.last_import_error}. Open the import log for the reasons.` }
+          : { tone: 'success', title: `${source.name} imported`, message: 'Channels and programmes are up to date in the EPG grid.' })
       }
     }
   }, [data, notify, queryClient])
@@ -722,6 +727,9 @@ export function Sources() {
                               <RefreshCw className={`h-4 w-4${refreshing ? ' animate-spin' : ''}`} aria-hidden="true" />
                             </button>
                           )}
+                          <button type="button" className="icon-button" onClick={() => setLogSource(source)} aria-label={`Import log of ${source.name}`} title="Import log">
+                            <History className="h-4 w-4" aria-hidden="true" />
+                          </button>
                           {canEdit && (
                             <button type="button" className="icon-button" onClick={() => handleEdit(source)} aria-label={`Edit ${source.name}`} title="Edit source">
                               <Pencil className="h-4 w-4" aria-hidden="true" />
@@ -754,6 +762,8 @@ export function Sources() {
         )}
         {!isLoading && !isError && filteredSources.length > 0 && <Pagination {...paginationProps} itemLabel="sources" />}
       </section>
+
+      <SourceImportLogDialog source={logSource} onClose={() => setLogSource(null)} />
 
       <ConfirmDialog
         open={bulkDeleteOpen}

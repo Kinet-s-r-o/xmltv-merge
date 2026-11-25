@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ type ImportService struct {
 	sourceRepo  *repository.SourceRepository
 	channelRepo *repository.ChannelRepository
 	progRepo    *repository.ProgrammeRepository
+	logRepo     *repository.ImportLogRepository
 	// OnImported is called after a source import finished successfully.
 	OnImported func(sourceID int)
 
@@ -51,37 +53,49 @@ const maxConcurrentImports = 2
 
 var sourceHTTPClient = &http.Client{Timeout: 5 * time.Minute}
 
-func (s *ImportService) ImportURL(ctx context.Context, source models.Source) error {
+// ImportURL downloads and imports a URL source and records the attempt in
+// the import log.
+func (s *ImportService) ImportURL(ctx context.Context, source models.Source, trigger ImportTrigger) error {
+	sourceID := source.ID
+	run := s.startRun(&sourceID, source.Name, trigger, StageDownload)
+	err := s.importURL(ctx, source, run)
+	s.finishRun(run, err)
+	if err != nil {
+		// The import context may have expired; record the failure regardless.
+		statusCtx, cancel := logCtx()
+		defer cancel()
+		_ = s.sourceRepo.UpdateImportStatus(statusCtx, source.ID, "error", run.entry.Error)
+	}
+	return err
+}
+
+func (s *ImportService) importURL(ctx context.Context, source models.Source, run *importRun) error {
 	parsed, err := url.ParseRequestURI(source.SourceURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		err = fmt.Errorf("source URL must be a valid HTTP or HTTPS URL")
-	} else {
-		var req *http.Request
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, source.SourceURL, nil)
-		if err == nil {
-			var response *http.Response
-			response, err = sourceHTTPClient.Do(req)
-			if err == nil {
-				defer response.Body.Close()
-				if response.StatusCode < 200 || response.StatusCode >= 300 {
-					err = fmt.Errorf("source returned HTTP %s", response.Status)
-				} else {
-					const maxSourceSize = 100 << 20
-					body, readErr := io.ReadAll(io.LimitReader(response.Body, maxSourceSize+1))
-					if readErr != nil {
-						err = readErr
-					} else if len(body) > maxSourceSize {
-						err = fmt.Errorf("source file exceeds 100 MB limit")
-					} else {
-						_, err = s.importXML(ctx, source.ID, source.Name, bytes.NewReader(body))
-					}
-				}
-			}
-		}
+		return fmt.Errorf("source URL must be a valid HTTP or HTTPS URL")
 	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source.SourceURL, nil)
 	if err != nil {
-		_ = s.sourceRepo.UpdateImportStatus(ctx, source.ID, "error", err.Error())
+		return err
 	}
+	response, err := sourceHTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("source returned HTTP %s", response.Status)
+	}
+	const maxSourceSize = 100 << 20
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxSourceSize+1))
+	run.entry.Bytes = int64(len(body))
+	if err != nil {
+		return fmt.Errorf("download interrupted after %d bytes: %w", len(body), err)
+	}
+	if len(body) > maxSourceSize {
+		return fmt.Errorf("source file exceeds 100 MB limit")
+	}
+	_, err = s.importXML(ctx, source.ID, source.Name, bytes.NewReader(body), run)
 	return err
 }
 
@@ -91,6 +105,7 @@ func NewImportService(db *pgxpool.Pool) *ImportService {
 		sourceRepo:  repository.NewSourceRepository(db),
 		channelRepo: repository.NewChannelRepository(db),
 		progRepo:    repository.NewProgrammeRepository(db),
+		logRepo:     repository.NewImportLogRepository(db),
 		refreshing:  make(map[int]bool),
 		importSlots: make(chan struct{}, maxConcurrentImports),
 	}
@@ -137,7 +152,7 @@ func (s *ImportService) UpdateURLSource(ctx context.Context, id int, name, sourc
 // StartRefresh queues a background import of a URL source and returns at once.
 // The outcome is recorded in the source's last import status. It reports
 // false when the source does not exist.
-func (s *ImportService) StartRefresh(ctx context.Context, id int) (bool, error) {
+func (s *ImportService) StartRefresh(ctx context.Context, id int, user string) (bool, error) {
 	source, err := s.sourceRepo.GetByID(ctx, id)
 	if err != nil {
 		return false, err
@@ -154,7 +169,7 @@ func (s *ImportService) StartRefresh(ctx context.Context, id int) (bool, error) 
 	go func() {
 		defer s.endRefresh(source.ID)
 		// Detached from the HTTP request: the import must outlive the response.
-		if err := s.runImport(context.Background(), *source); err != nil {
+		if err := s.runImport(context.Background(), *source, ImportTrigger{Kind: TriggerManual, User: user}); err != nil {
 			log.Printf("refresh: import source %q: %v", source.Name, err)
 		} else {
 			log.Printf("refresh: imported source %q", source.Name)
@@ -170,7 +185,7 @@ func (s *ImportService) ImportScheduled(ctx context.Context, source models.Sourc
 		return true, nil
 	}
 	defer s.endRefresh(source.ID)
-	return false, s.runImport(ctx, source)
+	return false, s.runImport(ctx, source, ImportTrigger{Kind: TriggerScheduled})
 }
 
 // IsRefreshing reports whether the source has an import running or queued.
@@ -197,7 +212,7 @@ func (s *ImportService) endRefresh(id int) {
 }
 
 // runImport waits for an import slot, then imports the source within sourceImportTimeout.
-func (s *ImportService) runImport(ctx context.Context, source models.Source) error {
+func (s *ImportService) runImport(ctx context.Context, source models.Source, trigger ImportTrigger) error {
 	select {
 	case s.importSlots <- struct{}{}:
 	case <-ctx.Done():
@@ -206,7 +221,7 @@ func (s *ImportService) runImport(ctx context.Context, source models.Source) err
 	defer func() { <-s.importSlots }()
 	importCtx, cancel := context.WithTimeout(ctx, sourceImportTimeout)
 	defer cancel()
-	return s.ImportURL(importCtx, source)
+	return s.ImportURL(importCtx, source, trigger)
 }
 
 type ImportResult struct {
@@ -217,30 +232,35 @@ type ImportResult struct {
 	ImportedAt string `json:"imported_at"`
 }
 
-func (s *ImportService) ImportXML(ctx context.Context, sourceName string, data io.Reader) (*ImportResult, error) {
-	return s.importXML(ctx, 0, sourceName, data)
+// ImportXML imports an uploaded XMLTV file and records the attempt in the import log.
+func (s *ImportService) ImportXML(ctx context.Context, sourceName string, data io.Reader, user string) (*ImportResult, error) {
+	run := s.startRun(nil, sourceName, ImportTrigger{Kind: TriggerUpload, User: user}, StageParse)
+	result, err := s.importXML(ctx, 0, sourceName, data, run)
+	s.finishRun(run, err)
+	return result, err
 }
 
-func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName string, data io.Reader) (*ImportResult, error) {
+func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName string, data io.Reader, run *importRun) (*ImportResult, error) {
 	start := time.Now()
+	run.entry.Stage = StageParse
 
-	// Read all data
-	buf := make([]byte, 0, 1024*1024)
-	tmp := make([]byte, 64*1024)
-	for {
-		n, err := data.Read(tmp)
-		if n > 0 {
-			buf = append(buf, tmp[:n]...)
-		}
-		if err != nil {
-			break
-		}
+	buf, err := io.ReadAll(data)
+	if err != nil {
+		return nil, fmt.Errorf("read xml: %w", err)
+	}
+	if run.entry.Bytes == 0 {
+		run.entry.Bytes = int64(len(buf))
 	}
 
 	// Parse XML
 	result, err := parser.ParseXML(buf)
 	if err != nil {
 		return nil, fmt.Errorf("parse xml: %w", err)
+	}
+	run.entry.ProgrammesInvalid = len(result.Invalid)
+	run.entry.ProgrammesTotal = len(result.Programmes) + len(result.Invalid)
+	for _, invalid := range result.Invalid {
+		run.issue("programme on channel %q starting %q skipped: %s", invalid.Channel, invalid.Start, invalid.Reason)
 	}
 
 	// Determine source name
@@ -259,20 +279,26 @@ func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName 
 			return nil, fmt.Errorf("upsert source: %w", err)
 		}
 	}
+	run.entry.SourceID = &sourceID
+	run.entry.SourceName = name
+	run.entry.Stage = StageChannels
+	run.entry.ChannelsTotal = len(result.Channels)
 
 	// Upsert channels
 	channelMap := make(map[string]int)
 	for _, ch := range result.Channels {
 		id, err := s.channelRepo.Upsert(ctx, sourceID, ch.ExternalID, ch.Name, ch.NameLang, ch.IconURL, ch.URL)
 		if err != nil {
-			return nil, fmt.Errorf("upsert channel %s: %w", ch.ExternalID, err)
+			return nil, fmt.Errorf("store channel %q: %w", ch.ExternalID, err)
 		}
 		channelMap[ch.ExternalID] = id
+		run.entry.ChannelsImported++
 	}
 	channelIDs := make([]int, 0, len(channelMap))
 	for _, id := range channelMap {
 		channelIDs = append(channelIDs, id)
 	}
+	run.entry.Stage = StageProgrammes
 	now := time.Now().UTC()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	if err := s.progRepo.DeleteCurrentAndFuture(ctx, sourceID, channelIDs, todayStart); err != nil {
@@ -281,13 +307,15 @@ func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName 
 
 	// Import only today's and future programmes; older schedules remain unchanged.
 	progCount := 0
+	unknownChannels := map[string]int{}
 	for _, pp := range result.Programmes {
 		if pp.StartTime.Before(todayStart) {
+			run.entry.ProgrammesPast++
 			continue
 		}
 		channelID, ok := channelMap[pp.ChannelExternalID]
 		if !ok {
-			// Channel not found, skip
+			unknownChannels[pp.ChannelExternalID]++
 			continue
 		}
 
@@ -295,25 +323,50 @@ func (s *ImportService) importXML(ctx context.Context, sourceID int, sourceName 
 			pp.Subtitle, pp.SubtitleLang, pp.Description, pp.DescriptionLang,
 			pp.Country, pp.IconURL, pp.EpisodeNum, pp.EpisodeNumSystem, pp.Year)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("stopped after storing %d programmes: %w", progCount, ctx.Err())
+			}
+			run.entry.ProgrammesFailed++
+			run.issue("programme on channel %q at %s not stored: %v", pp.ChannelExternalID, pp.StartTime.Format(time.RFC3339), err)
 			continue
 		}
 
-		// Insert titles, credits, categories
-		if err := s.insertTitles(ctx, progID, pp.Titles); err != nil {
-			// Non-fatal
+		// Titles, credits and categories: the programme stays, the failed detail is reported.
+		details := []struct {
+			what string
+			err  error
+		}{
+			{"titles", s.insertTitles(ctx, progID, pp.Titles)},
+			{"credits", s.insertCredits(ctx, progID, pp.Credits)},
+			{"categories", s.insertCategories(ctx, progID, pp.Categories)},
 		}
-		if err := s.insertCredits(ctx, progID, pp.Credits); err != nil {
-			// Non-fatal
-		}
-		if err := s.insertCategories(ctx, progID, pp.Categories); err != nil {
-			// Non-fatal
+		for _, detail := range details {
+			if detail.err != nil {
+				run.entry.DetailErrors++
+				run.issue("programme on channel %q at %s: %s not stored: %v", pp.ChannelExternalID, pp.StartTime.Format(time.RFC3339), detail.what, detail.err)
+			}
 		}
 
 		progCount++
 	}
+	run.entry.ProgrammesImported = progCount
+	missing := make([]string, 0, len(unknownChannels))
+	for channel := range unknownChannels {
+		missing = append(missing, channel)
+	}
+	sort.Strings(missing)
+	for _, channel := range missing {
+		run.entry.ProgrammesUnknownChannel += unknownChannels[channel]
+		run.issue("%d programmes skipped: channel %q is not declared in the file", unknownChannels[channel], channel)
+	}
+	run.entry.Stage = StageDone
 
-	// Update source import status
-	s.sourceRepo.UpdateImportStatus(ctx, sourceID, "success", "")
+	// Update source import status; a partial import points to the import log.
+	statusError := ""
+	if problems := run.problems(); problems > 0 {
+		statusError = fmt.Sprintf("imported with %d problems; see the import log", problems)
+	}
+	s.sourceRepo.UpdateImportStatus(ctx, sourceID, "success", statusError)
 	if s.OnImported != nil {
 		s.OnImported(sourceID)
 	}

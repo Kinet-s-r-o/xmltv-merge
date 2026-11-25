@@ -126,6 +126,15 @@ type ParseResult struct {
 	Source     ParsedSource
 	Channels   []ParsedChannel
 	Programmes []ParsedProgramme
+	// Invalid lists programmes skipped because they could not be parsed.
+	Invalid []InvalidProgramme
+}
+
+// InvalidProgramme is a <programme> element that was skipped, with the reason.
+type InvalidProgramme struct {
+	Channel string
+	Start   string
+	Reason  string
 }
 
 // ParseXML parses XMLTV content and returns structured data
@@ -165,6 +174,7 @@ func ParseXML(data []byte) (*ParseResult, error) {
 	for _, p := range tv.Programmes {
 		pp, err := parseProgramme(p)
 		if err != nil {
+			result.Invalid = append(result.Invalid, InvalidProgramme{Channel: p.Channel, Start: p.Start, Reason: err.Error()})
 			continue
 		}
 		result.Programmes = append(result.Programmes, *pp)

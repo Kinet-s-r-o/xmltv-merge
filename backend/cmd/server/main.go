@@ -138,6 +138,7 @@ func main() {
 		r.With(allow(edit, src)).Put("/api/v1/sources/{id}", h.UpdateSource)
 		r.With(allow(del, src)).Delete("/api/v1/sources/{id}", h.DeleteSource)
 		r.With(allow(edit, src)).Post("/api/v1/sources/{id}/refresh", h.RefreshSource)
+		r.With(allow(read, src)).Get("/api/v1/sources/{id}/imports", h.SourceImportLog)
 		r.With(allow(edit, src)).Patch("/api/v1/sources/{id}/activation", h.SetSourceEnabled)
 
 		// XMLTV outputs.

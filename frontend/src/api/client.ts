@@ -53,6 +53,32 @@ export interface Source {
   refreshing?: boolean
 }
 
+/** One audited import attempt of a source (GET /sources/{id}/imports). */
+export interface SourceImportLog {
+  id: number
+  source_id?: number
+  source_name: string
+  trigger: 'manual' | 'scheduled' | 'upload' | string
+  triggered_by?: string
+  started_at: string
+  finished_at?: string
+  status: 'running' | 'success' | 'partial' | 'error' | string
+  stage: string
+  error?: string
+  bytes: number
+  channels_total: number
+  channels_imported: number
+  programmes_total: number
+  programmes_imported: number
+  programmes_past: number
+  programmes_invalid: number
+  programmes_unknown_channel: number
+  programmes_failed: number
+  detail_errors: number
+  issue_count: number
+  issues: string[]
+}
+
 export interface Channel {
   id: number
   source_id: number
@@ -387,6 +413,7 @@ export const api = {
   deleteSource: (id: number) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
 
   /** Queues a background import (202); the outcome appears in the source status. */
+  sourceImports: async (id: number) => (await request<SourceImportLog[] | null>(`/sources/${id}/imports`)) ?? [],
   refreshSource: (id: number) => request<{ status: string }>(`/sources/${id}/refresh`, { method: 'POST' }),
 
   setSourceEnabled: (id: number, enabled: boolean) =>

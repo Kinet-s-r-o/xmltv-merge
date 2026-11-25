@@ -24,6 +24,11 @@ func NewScheduler(db *pgxpool.Pool, imports *ImportService) *Scheduler {
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
+	if closed, err := s.imports.MarkInterruptedImports(ctx); err != nil {
+		log.Printf("scheduler: close interrupted import log entries: %v", err)
+	} else if closed > 0 {
+		log.Printf("scheduler: marked %d interrupted imports in the import log", closed)
+	}
 	s.runDue(ctx)
 	s.cleanupHistory(ctx)
 	importTicker := time.NewTicker(time.Minute)
@@ -50,6 +55,11 @@ func (s *Scheduler) cleanupHistory(ctx context.Context) {
 	}
 	if deleted > 0 {
 		log.Printf("scheduler: removed %d programmes outside source retention periods", deleted)
+	}
+	if removed, err := s.imports.CleanupImportLog(ctx); err != nil {
+		log.Printf("scheduler: clean import log: %v", err)
+	} else if removed > 0 {
+		log.Printf("scheduler: removed %d import log entries past retention", removed)
 	}
 }
 

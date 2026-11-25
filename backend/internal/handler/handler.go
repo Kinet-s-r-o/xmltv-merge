@@ -51,7 +51,7 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	result, err := h.importSvc.ImportXML(r.Context(), sourceName, file)
+	result, err := h.importSvc.ImportXML(r.Context(), sourceName, file, actorName(r))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -376,7 +376,7 @@ func (h *Handler) RefreshSource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source id"})
 		return
 	}
-	found, err := h.importSvc.StartRefresh(r.Context(), id)
+	found, err := h.importSvc.StartRefresh(r.Context(), id, actorName(r))
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSourceDisabled), errors.Is(err, service.ErrRefreshInProgress):
@@ -392,6 +392,35 @@ func (h *Handler) RefreshSource(w http.ResponseWriter, r *http.Request) {
 	}
 	// The import runs in the background; its result lands in the source status.
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
+}
+
+// SourceImportLog lists the newest import attempts of a source (audit log).
+func (h *Handler) SourceImportLog(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil || id < 1 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source id"})
+		return
+	}
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+	entries, err := h.importSvc.ImportLog(r.Context(), id, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// actorName is the signed-in username recorded in audit entries.
+func actorName(r *http.Request) string {
+	if p := PrincipalFrom(r.Context()); p != nil && p.User != nil {
+		return p.User.Username
+	}
+	return ""
 }
 
 func (h *Handler) SetSourceEnabled(w http.ResponseWriter, r *http.Request) {

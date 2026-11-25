@@ -154,7 +154,9 @@ dialog 100 < notifications 120. The skip link uses 120 while focused.
   followed by the text state.
 - **Badges:** `.badge` + `.badge-success|-error|-warning|-accent`; neutral
   `.badge` for disabled. Source states: Imported (success), Import failed
-  (error), Awaiting import (warning), Disabled (neutral).
+  (error), Awaiting import (warning), Disabled (neutral); an Imported source
+  with problems shows its note in warning text. Import log attempts: Running
+  (accent), Imported (success), Partially imported (warning), Failed (error).
 - **Tables:** `<table class="data-table">`, sticky 40px header, values wrapped
   in `.table-text` (+ `font-mono` for IDs, timestamps, numbers), secondary
   lines in `.cell-sub`, actions in `.cell-actions`. Every data table pages
