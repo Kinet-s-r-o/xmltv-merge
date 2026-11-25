@@ -6,6 +6,13 @@ Overrides [`../MASTER.md`](../MASTER.md) only for the multicast output editor.
   `.tab-bar` (`role="tablist"`): "Stream settings" (four-column `.field` grid)
   and "Stations (N)". A tab with invalid values shows an error badge with
   text ("Check", "N invalid"), so problems on the hidden tab stay visible.
+  The dialog uses `fill` (`.dialog-fill`): on desktop the panel takes the
+  viewport height and the dialog body does not scroll; on the Stations tab
+  only the `.table-scroll` scrolls (sticky header), while the add row,
+  table toolbar and pagination stay in view. The settings tab scrolls in its
+  own `.fill-scroll` pane. Phones and short landscape screens keep the
+  normal single body scroll. The editable table uses `.data-table.is-editable`
+  for denser rows (30 px inputs).
   The master create/edit rules (dirty banner, discard confirmation,
   `beforeunload`) apply unchanged.
 - **Station table is editable.** Rows hold inputs (channel name, frequency,

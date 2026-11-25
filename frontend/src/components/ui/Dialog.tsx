@@ -16,6 +16,8 @@ interface DialogProps {
   children?: ReactNode
   /** Element that receives focus on open; defaults to the first focusable element. */
   initialFocusRef?: React.RefObject<HTMLElement | null>
+  /** Use the full viewport height and let the body content manage its own scrolling (e.g. a table that scrolls alone). */
+  fill?: boolean
 }
 
 /** Open dialogs, innermost last; only the top one handles keys and the app root stays inert until all close. */
@@ -28,7 +30,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * focus trap, Escape closes, body scroll locked, app root inert, focus restored
  * to the trigger on close. z-index 100 via .dialog-backdrop.
  */
-export function Dialog({ open, title, description, size = 'medium', role = 'dialog', busy, onClose, actions, children, initialFocusRef }: DialogProps) {
+export function Dialog({ open, title, description, size = 'medium', role = 'dialog', busy, onClose, actions, children, initialFocusRef, fill }: DialogProps) {
   const panelRef = useRef<HTMLElement>(null)
   const onCloseRef = useRef(onClose)
   const titleId = useId()
@@ -97,7 +99,7 @@ export function Dialog({ open, title, description, size = 'medium', role = 'dial
     >
       <section
         ref={panelRef}
-        className={`dialog-panel dialog-${size}`}
+        className={`dialog-panel dialog-${size}${fill ? ' dialog-fill' : ''}`}
         role={role}
         aria-modal="true"
         aria-labelledby={titleId}

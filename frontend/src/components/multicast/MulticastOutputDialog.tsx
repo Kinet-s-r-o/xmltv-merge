@@ -200,6 +200,7 @@ export function MulticastOutputDialog({ open, output, initial, saving, error, on
       <Dialog
         open={open}
         size="full"
+        fill
         busy={saving}
         title={
           <span className="inline-flex items-center gap-2">
@@ -224,7 +225,7 @@ export function MulticastOutputDialog({ open, output, initial, saving, error, on
       >
         <form
           id="multicast-output-form"
-          className="flex flex-col gap-3"
+          className="fill-stack flex flex-col gap-3"
           onSubmit={(event) => {
             event.preventDefault()
             if (canSave) onSave(toInput(form))
@@ -247,10 +248,10 @@ export function MulticastOutputDialog({ open, output, initial, saving, error, on
             </button>
           </div>
 
-          <div role="tabpanel" id="mc-panel-settings" aria-labelledby="mc-tab-settings" hidden={tab !== 'settings'}>
+          <div role="tabpanel" id="mc-panel-settings" aria-labelledby="mc-tab-settings" hidden={tab !== 'settings'} className="fill-scroll">
             <SettingsFields form={form} invalid={invalid} timezones={timezones} setField={setField} nameRef={nameRef} />
           </div>
-          <div role="tabpanel" id="mc-panel-stations" aria-labelledby="mc-tab-stations" hidden={tab !== 'stations'}>
+          <div role="tabpanel" id="mc-panel-stations" aria-labelledby="mc-tab-stations" hidden={tab !== 'stations'} className="fill-stack">
             <StationsEditor
               outputId={output?.id ?? null}
               rows={form.services}
@@ -584,9 +585,9 @@ function StationsEditor({ outputId, rows, duplicates, onChange }: StationsEditor
 
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="data-panel-section">
-        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="fill-stack flex flex-col gap-3">
+      <div className="data-panel-section !px-0 !pt-0 !pb-0">
+        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]">
           <label className="field">
             Source
             <select className="input" value={addSourceId} onChange={(e) => { setAddSourceId(e.target.value ? Number(e.target.value) : ''); setAddChannelId('') }}>
@@ -617,7 +618,7 @@ function StationsEditor({ outputId, rows, duplicates, onChange }: StationsEditor
             {relinkKey && <button type="button" className="btn btn-secondary" onClick={() => setRelinkKey(null)}>Cancel link</button>}
           </div>
         </div>
-        <p className="field-hint mt-2">
+        <p className="field-hint mt-1.5">
           {relinkKey
             ? `Choose the channel for ${rows.find((r) => r.key === relinkKey)?.display_name ?? 'the station'}; its DVB identifiers stay unchanged.`
             : 'New stations copy frequency, transport stream ID and network ID from the last row and get the next free service ID. Edit them in the table.'}
@@ -651,7 +652,7 @@ function StationsEditor({ outputId, rows, duplicates, onChange }: StationsEditor
           </div>
           <TableFilterSummary controls={table} />
           <div className="table-scroll">
-            <table className="data-table">
+            <table className="data-table is-editable">
               <thead>
                 <tr>
                   <TableHeaderCells controls={table} />
